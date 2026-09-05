@@ -1,0 +1,1774 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="description" content="讓角色坐在對面，陪你下一局十五路五子棋。">
+  <title>Gomoku</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Gomoku">
+  <script>document.addEventListener("gesturestart",function(event){event.preventDefault();});</script>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui,-apple-system,"Segoe UI",sans-serif;
+      --rose:#b76e79;
+      --line:#ecd8da;
+      --ink:#4a3728;
+      --muted:#77675b;
+      --panel:rgba(255,252,246,.92);
+      --wood:#d9aa66;
+      --wood-deep:#7b502d;
+      --danger:#9d3f35;
+    }
+    * { box-sizing:border-box; }
+    html,body { margin:0; min-width:0; touch-action:manipulation; }
+    body { min-height:100vh; overflow-x:hidden; color:var(--ink); background:#f7eef0; }
+    button,select,input,textarea { font:inherit; }
+    button { -webkit-tap-highlight-color:transparent; }
+    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+    .app {
+      width:min(1120px,100%); min-height:100vh; margin:0 auto; padding:clamp(12px,3vw,32px);
+      display:grid; grid-template-columns:minmax(0,1fr) minmax(240px,310px); align-items:center; gap:clamp(18px,4vw,42px);
+    }
+    .play-area { min-width:0; }
+    .heading { width:min(74vh,100%); margin:0 auto 12px; display:flex; align-items:center; justify-content:space-between; gap:9px; }
+    h1 {
+      min-width:0; margin:0; color:#8a5560; font-family:"Snell Roundhand","Savoye LET","Segoe Script","Brush Script MT",cursive;
+      font-size:clamp(1.9rem,5vw,2.6rem); font-weight:700; letter-spacing:.02em; line-height:1;
+    }
+    .pill {
+      flex:none; display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; min-height:34px; padding:5px 10px; border:1px solid #d9b2b8; border-radius:999px;
+      color:#a05f6a; background:#fdf7f8; font-size:.74rem; font-weight:800; line-height:1.2;
+    }   /* 09-05 業主截圖：span 藥丸（回合標）比 button 矮一截＝行內元素吃不到 min-height → inline-flex 置中 */
+    button.pill { cursor:pointer; }
+    /* 回棋室：右上素字（家格式，同對局史 back-link）；相對路徑 ../chambre/ 在 GitHub Pages 同 origin 下指向大廳 */
+    .home-link { flex: none; padding: 8px 0; color: #a08a8d; text-decoration: none; font-size: .82rem; -webkit-tap-highlight-color: transparent; }
+    .home-link:active { color: #b76e79; }
+    .coach-toggle { margin-left:auto; }
+    .coach-toggle[aria-checked="false"] { color:var(--muted); }
+    .board-stage { position:relative; width:min(74vh,100%); margin:68px auto 70px; }
+    .board-frame {
+      width:100%; padding:clamp(8px,1.5vw,14px); border-radius:10px; background:var(--wood-deep);
+      box-shadow:0 12px 35px rgba(56,38,24,.25),inset 0 0 0 1px rgba(255,255,255,.17);
+    }
+    #board {
+      display:grid; grid-template-columns:repeat(15,minmax(0,1fr)); grid-template-rows:repeat(15,minmax(0,1fr));
+      width:100%; aspect-ratio:1; padding:2.3%; overflow:hidden; border:1px solid rgba(63,39,19,.55);
+      background:
+        repeating-linear-gradient(93deg, rgba(120,72,30,.07) 0 2px, transparent 2px 11px),
+        repeating-linear-gradient(90.5deg, rgba(120,72,30,.045) 0 1px, transparent 1px 27px),
+        repeating-linear-gradient(88deg, rgba(255,255,255,.06) 0 3px, transparent 3px 17px),
+        linear-gradient(180deg, rgba(255,255,255,.10), rgba(96,51,20,.04)),
+        #e9c68e;   /* 09-05 業主：同暗棋款淡木紋（純 CSS 三層細紋），原 var(--wood) #d9aa66 */
+      user-select:none; -webkit-user-select:none; touch-action:manipulation;
+    }
+    .point { position:relative; min-width:0; min-height:0; padding:0; border:0; border-radius:0; background:transparent; cursor:pointer; }
+    .point::before,.point::after { content:""; position:absolute; z-index:0; background:rgba(65,42,22,.78); pointer-events:none; }
+    .point::before { left:0; right:0; top:calc(50% - .5px); height:1px; }
+    .point::after { top:0; bottom:0; left:calc(50% - .5px); width:1px; }
+    .point[data-col="0"]::before { left:50%; }
+    .point[data-col="14"]::before { right:50%; }
+    .point[data-row="0"]::after { top:50%; }
+    .point[data-row="14"]::after { bottom:50%; }
+    .point:focus-visible { z-index:4; outline:3px solid #fff7d6; outline-offset:-3px; border-radius:50%; }
+    .point:disabled { cursor:default; }
+    .star { position:absolute; z-index:1; left:50%; top:50%; width:18%; aspect-ratio:1; border-radius:50%; background:#4e321c; transform:translate(-50%,-50%); pointer-events:none; }
+    .stone { position:absolute; z-index:2; inset:6%; border-radius:50%; pointer-events:none; filter:drop-shadow(0 2px 1px rgba(48,29,15,.32)); }
+    .stone.black { border:1px solid #090807; background:radial-gradient(circle at 35% 28%,#62605c 0,#242320 32%,#090908 76%); }
+    .stone.white { border:1px solid #afa89c; background:radial-gradient(circle at 34% 27%,#fff 0,#f4f0e8 45%,#cfc8bc 100%); }
+    .last-mark { position:absolute; z-index:3; left:50%; top:50%; width:22%; aspect-ratio:1; border:2px solid var(--danger); border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; }
+    .hint-mark { position:absolute; z-index:3; left:50%; top:50%; width:28%; aspect-ratio:1; border:2px solid #2f766f; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; }
+    .avatar {
+      position:absolute; z-index:12; width:50px; height:50px; overflow:hidden; border:3px solid #fffaf3; border-radius:50%;
+      background:#bd8d83; box-shadow:0 3px 12px rgba(48,38,31,.3); cursor:pointer;
+    }
+    .avatar img,.avatar-fallback { display:block; width:100%; height:100%; }
+    .avatar img { object-fit:cover; }
+    .avatar img[hidden],.avatar-fallback[hidden] { display:none; }
+    .avatar-fallback { display:grid; place-items:center; color:#fff; font-weight:800; }
+    .avatar-him { top:-58px; left:4px; }
+    .avatar-player { right:4px; bottom:-58px; }
+    .bubble-stack { position:absolute; z-index:11; display:flex; width:calc(100% - 72px); pointer-events:none; }
+    .bubble-stack-him { bottom:calc(100% + 8px); left:66px; flex-direction:column; justify-content:flex-end; align-items:flex-start; }
+    .bubble-stack-player { top:calc(100% + 8px); right:66px; flex-direction:column; align-items:flex-end; }
+    .coach-bubble {
+      position:relative; width:fit-content; max-width:min(96%,560px); margin:0 0 6px; padding:8px 11px;
+      border:1px solid rgba(122,95,73,.18); border-radius:5px 13px 13px 13px; color:#3b3028;
+      background:rgba(255,250,243,.96); box-shadow:0 2px 9px rgba(72,51,36,.18); font-size:.84rem; line-height:1.5;
+    }
+    .coach-bubble.player { border-radius:13px 5px 13px 13px; color:#6f4149; background:rgba(244,221,225,.97); }
+    .coach-bubble.pop { animation:coach-pop .22s ease-out both; }
+    .coach-thinking { margin:0 0 6px; padding:7px 10px; border:1px solid rgba(122,95,73,.16); border-radius:5px 12px 12px 12px; color:var(--muted); background:rgba(255,250,243,.94); }
+    .thinking-dots { display:inline-flex; gap:3px; }
+    .thinking-dots i { width:4px; height:4px; border-radius:50%; background:currentColor; animation:coach-dot 1.1s infinite ease-in-out; }
+    .thinking-dots i:nth-child(2) { animation-delay:.15s; }
+    .thinking-dots i:nth-child(3) { animation-delay:.3s; }
+    @keyframes coach-pop { from { opacity:0; transform:scale(.84); } to { opacity:1; transform:scale(1); } }
+    @keyframes coach-dot { 0%,70%,100% { transform:translateY(0); opacity:.35; } 35% { transform:translateY(-3px); opacity:1; } }
+    .board-stage.two-player .avatar,.board-stage.two-player .bubble-stack,.board-stage.coach-off .avatar,.board-stage.coach-off .bubble-stack { display:none; }
+    .chat-row { width:min(74vh,100%); margin:10px auto 12px; display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; }
+    .chat-row[hidden] { display:none; }
+    .chat-row input { min-width:0; min-height:44px; padding:8px 11px; border:1px solid var(--line); border-radius:10px; color:var(--ink); background:#fffdf8; font-size:16px; }
+    .chat-row button { min-width:64px; min-height:42px; padding:7px 12px; border:1px solid #a05f6a; border-radius:10px; color:#fff; background:var(--rose); cursor:pointer; font-weight:800; }
+    .chat-row input:disabled,.chat-row button:disabled { cursor:not-allowed; opacity:.55; }
+    .side-panel { padding:clamp(18px,3vw,28px); border:1px solid rgba(122,91,63,.18); border-radius:16px; background:var(--panel); box-shadow:0 10px 30px rgba(75,53,35,.12); }
+    .eyebrow { margin:0 0 8px; color:var(--muted); font-size:.78rem; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
+    #status { min-height:2.8em; margin:0 0 18px; font-family:Georgia,serif; font-size:clamp(1.05rem,2.4vw,1.35rem); font-weight:700; line-height:1.4; }
+    .game-settings { display:grid; grid-template-columns:1fr; gap:10px; }
+    .setting { display:grid; gap:5px; color:var(--muted); font-size:.78rem; font-weight:750; }
+    .setting select { width:100%; min-height:42px; padding:7px 28px 7px 9px; border:1px solid #bca790; border-radius:8px; color:var(--ink); background:#fffaf3; }
+    .difficulty-hint,.legend,.setup-note { color:var(--muted); font-size:.8rem; line-height:1.5; }
+    .difficulty-hint { margin:7px 0 15px; }
+    .actions { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+    .actions button { min-height:43px; padding:9px 12px; border:1px solid var(--rose); border-radius:8px; color:#fff; background:var(--rose); cursor:pointer; font-weight:750; }
+    .actions button.secondary { color:var(--rose); background:transparent; }
+    .actions button:disabled { cursor:default; opacity:.42; }
+    .legend { margin:17px 0 0; padding-top:14px; border-top:1px solid var(--line); }
+    .setup-note { margin:12px 0 0; padding:10px 11px; border-radius:9px; color:#7b5159; background:#f9edf0; }
+    .setup-note.ready { background:#f5e6e9; }
+    .chatlog-overlay { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; background:rgba(58,44,34,.28); }
+    .chatlog-overlay[hidden] { display:none; }
+    .chatlog-panel { display:flex; flex-direction:column; width:min(440px,92vw); max-height:74vh; overflow:hidden; border:1px solid rgba(122,95,73,.25); border-radius:16px; background:rgba(251,246,237,.94); box-shadow:0 18px 44px rgba(48,38,31,.3); }
+    .chatlog-head { display:flex; align-items:center; justify-content:space-between; padding:12px 12px 10px 18px; border-bottom:1px solid rgba(122,95,73,.12); }
+    .chatlog-body { flex:1; overflow-y:auto; padding:8px 16px 18px; }
+    .chatlog-close { min-width:46px; min-height:30px; border:0; border-radius:8px; color:#8a5560; background:rgba(183,110,121,.16); cursor:pointer; }
+    .chatlog-title { color:#a08a8d; font-size:.78rem; letter-spacing:.18em; }
+    .chatlog-actions { display:flex; align-items:center; gap:6px; }
+    .chatlog-tool { position:relative; min-height:30px; padding:4px 8px; display:grid; place-items:center; border:1px solid #d9b2b8; border-radius:7px; color:#87525b; background:#fff; cursor:pointer; font-size:.78rem; }
+    .chatlog-tool input { position:absolute; width:1px; height:1px; opacity:0; }
+    .chatlog-status { flex:none; margin:0; padding:6px 18px 0; color:#a08a8d; font-size:.76rem; }
+    .chatlog-status:empty { display:none; }
+    .cl-row { display:flex; margin:7px 0; }
+    .cl-row.player { justify-content:flex-end; }
+    .cl-bubble { max-width:82%; padding:8px 11px; border:1px solid rgba(122,95,73,.16); font-size:.9rem; line-height:1.55; }
+    .cl-row.him .cl-bubble { border-radius:4px 13px 13px 13px; background:#fff; }
+    .cl-row.player .cl-bubble { border-radius:13px 4px 13px 13px; color:#6f4149; background:#f0e0e2; }
+    .cl-empty,.cl-day { text-align:center; color:#a08a8d; font-size:.78rem; }
+    .cl-day { margin:12px 0 4px; letter-spacing:.1em; }
+    .drawer-overlay { position:fixed; inset:0; z-index:70; display:flex; justify-content:flex-end; background:rgba(58,44,34,.32); }
+    .drawer-overlay[hidden] { display:none; }
+    .drawer { width:min(480px,100%); height:100%; overflow-y:auto; background:#fffaf5; box-shadow:-12px 0 36px rgba(48,38,31,.2); }
+    .drawer-head { position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 12px 10px 18px; border-bottom:1px solid rgba(122,95,73,.12); background:#fffaf5; }
+    .drawer-head h2 { margin:0; color:#8a5560; }
+    .icon-close { min-width:46px; min-height:32px; border:0; border-radius:8px; color:#8a5560; background:rgba(183,110,121,.16); cursor:pointer; }
+    .settings-form { padding:18px; display:grid; gap:15px; }
+    .setting-note { margin:0; color:var(--muted); font-size:.82rem; line-height:1.55; }
+    fieldset { margin:0; padding:14px; border:1px solid var(--line); border-radius:11px; }
+    legend { padding:0 6px; color:#8a5560; font-weight:800; }
+    .field { display:grid; gap:5px; margin-bottom:11px; }
+    .field:last-child { margin-bottom:0; }
+    .field label { color:var(--muted); font-size:.8rem; font-weight:750; }
+    .field input,.field textarea,.field select { width:100%; min-width:0; padding:9px 10px; border:1px solid #bca790; border-radius:8px; color:var(--ink); background:#fff; font-size:16px; }
+    .field textarea { min-height:180px; resize:vertical; line-height:1.5; }
+    .inline { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:7px; align-items:stretch; }
+    .quick-picks { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+    .card-tools,.avatar-upload-grid { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:7px; margin-bottom:10px; }
+    .avatar-upload-grid { grid-template-columns:1fr 1fr; }
+    .avatar-slot { display:flex; align-items:center; gap:8px; min-width:0; }
+    .avatar-preview { flex:none; width:44px; height:44px; overflow:hidden; border:2px solid #e6d2c4; border-radius:50%; background:#bd8d83; display:grid; place-items:center; color:#fff; font-weight:800; }
+    .avatar-preview img { width:100%; height:100%; object-fit:cover; display:block; }
+    .avatar-preview img[hidden] { display:none; }
+    .small-button,.danger-button,.upload-label { min-height:40px; padding:7px 11px; border:1px solid #b9828a; border-radius:8px; color:#87525b; background:#fff; cursor:pointer; font-weight:750; }
+    .upload-label { position:relative; display:grid; place-items:center; text-align:center; }
+    .upload-label input { position:absolute; width:1px; height:1px; opacity:0; }
+    .danger-button { color:#8c3232; border-color:#c99191; }
+    .status { min-height:1.5em; margin:0; color:var(--muted); font-size:.8rem; }
+    .field-hint { margin: 4px 0 10px; color: var(--muted); font-size: .76rem; line-height: 1.5; }
+    .field-hint a { color: #87525b; text-decoration: underline; text-underline-offset: 2px; }
+    .toggle-row { display:flex; align-items:center; gap:8px; font-weight:600; color:var(--ink); cursor:pointer; }
+    .toggle-row input { width:18px; height:18px; accent-color:#b76e79; }
+    .privacy-mini { margin:0; color:var(--muted); font-size:.78rem; line-height:1.55; }
+    :focus-visible { outline:3px solid rgba(183,110,121,.35); outline-offset:2px; }
+    @media (prefers-reduced-motion:reduce) { .thinking-dots i,.coach-bubble { animation:none; } }
+    @media (max-width:760px) {
+      .app { min-height:0; padding:12px; grid-template-columns:1fr; gap:16px; }
+      .heading,.board-stage,.chat-row { width:min(calc(100vw - 24px),72vh); }
+      .heading { margin-bottom:8px; }
+      .side-panel { width:min(calc(100vw - 24px),560px); margin:auto; }
+      .pill { padding-inline:8px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="play-area" aria-labelledby="title">
+      <div class="heading">
+        <h1 id="title">Gomoku</h1>
+        <button id="coachToggle" class="pill coach-toggle" type="button" role="switch" aria-checked="true">陪玩</button>
+        <span class="pill" id="turnBadge">黑棋回合</span>
+        <button id="settingButton" class="pill" type="button">設定</button>
+        <a class="home-link" href="../chambre/">回棋室</a>
+      </div>
+      <div id="coachStage" class="board-stage">
+        <div class="avatar avatar-him" role="button" tabindex="0" aria-label="開啟對話">
+          <img id="himAvatar" alt="" hidden><span id="himAvatarFallback" class="avatar-fallback">角</span>
+        </div>
+        <div id="himBubbleStack" class="bubble-stack bubble-stack-him" aria-live="polite"></div>
+        <div class="board-frame"><div id="board" role="grid" aria-label="十五路五子棋盤"></div></div>
+        <div id="playerBubbleStack" class="bubble-stack bubble-stack-player" aria-live="polite"></div>
+        <div class="avatar avatar-player" role="button" tabindex="0" aria-label="開啟對話">
+          <img id="playerAvatar" alt="" hidden><span id="playerAvatarFallback" class="avatar-fallback">你</span>
+        </div>
+      </div>
+      <form id="chatForm" class="chat-row" autocomplete="off">
+        <label class="sr-only" for="chatInput">跟他說話</label>
+        <input id="chatInput" type="text" maxlength="300" placeholder="輸入訊息">
+        <button id="chatSendButton" type="submit">送出</button>
+        <button id="helpButton" type="button">求救</button>
+      </form>
+    </section>
+    <aside class="side-panel" aria-label="對局資訊">
+      <p class="eyebrow">五子棋 · 十五路 · 無禁手</p>
+      <p id="status" role="status" aria-live="polite">輪到黑棋（你）</p>
+      <div class="game-settings">
+        <select id="mode" hidden aria-hidden="true"><option value="computer" selected>對電腦</option></select>
+        <label class="setting" for="difficulty"><span>電腦難度</span><select id="difficulty"><option value="beginner" selected>初級</option><option value="advanced">進階</option><option value="expert">高手</option></select></label>
+      </div>
+      <p class="difficulty-hint" id="difficultyHint">目前即為本局使用的難度。</p>
+      <div class="actions"><button type="button" id="undo" class="secondary">悔棋</button><button type="button" id="newGame">新局</button></div>
+      <p class="legend">黑棋先行。對電腦時你執黑、角色執白；橫、豎或斜線先連成五子者勝。</p>
+      <p id="setupNote" class="setup-note">設定完成後他會開口</p>
+    </aside>
+  </main>
+  <div id="settingsOverlay" class="drawer-overlay" hidden>
+    <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <header class="drawer-head"><h2 id="settingsTitle">Gomoku 設定</h2><button class="icon-close" type="button" data-close-settings>關閉</button></header>
+      <form id="settingsForm" class="settings-form">
+        <p class="setting-note">這些設定跟棋室大廳（Chambre）共用：在大廳或任何一房改，其他房都會跟著換。</p>
+        <fieldset>
+          <legend>API</legend>
+          <div class="quick-picks"><button class="small-button" type="button" data-endpoint-preset="google">Google AI Studio</button><button class="small-button" type="button" data-endpoint-preset="openrouter">OpenRouter</button><button class="small-button" type="button" data-endpoint-preset="custom">自訂</button></div>
+          <div class="field"><label for="endpointInput">端點網址</label><input id="endpointInput" name="endpoint" autocomplete="url"></div>
+          <div class="field"><label for="apiKeyInput">金鑰</label><div class="inline"><input id="apiKeyInput" name="apiKey" type="password" autocomplete="off"><button id="toggleKeyButton" class="small-button" type="button">顯示</button></div></div>
+          <p class="field-hint">還沒有金鑰？<a href="../chambre/guide.html">看圖文教學</a>（免費、不用綁卡，設定頁逐欄也有教）</p>
+          <div class="field"><label for="modelInput">模型名</label><div class="inline"><input id="modelInput" name="model" autocomplete="off"><button id="loadModelsButton" class="small-button" type="button">撈清單</button></div><select id="modelSelect" hidden></select></div>
+          <p id="modelStatus" class="status" aria-live="polite"></p>
+        </fieldset>
+        <fieldset>
+          <legend>角色卡</legend>
+          <div class="card-tools"><label class="upload-label">上傳檔案<input id="cardFileInput" type="file" accept=".png,.json,.md,.txt,image/png,application/json,text/plain,text/markdown"></label><button id="exportCardButton" class="small-button" type="button">匯出卡包</button></div>
+          <p id="cardStatus" class="status" aria-live="polite">上傳會覆蓋下方欄位；也可以直接手填。</p>
+          <div class="field"><label for="characterNameInput">角色名</label><input id="characterNameInput" name="characterName" autocomplete="off"></div>
+          <div class="field"><label for="characterDescriptionInput">角色描述</label><textarea id="characterDescriptionInput" name="characterDescription" placeholder="外觀、性格、說話風格"></textarea></div>
+          <div class="field"><label for="playerNameInput">玩家稱呼（他怎麼叫你）</label><input id="playerNameInput" name="playerName" value="你" autocomplete="off"></div>
+          <div class="field"><label class="toggle-row"><input id="postgameToggle" type="checkbox" checked> 終局複盤（每局結束多一次呼叫，讓他講評整局）</label></div>
+          <div class="field"><label for="playerSkillInput">你的棋力</label><select id="playerSkillInput" name="playerSkill"><option value="beginner">初學者</option><option value="experienced">會下</option></select></div>
+          <div class="avatar-upload-grid">
+            <div class="avatar-slot"><span class="avatar-preview"><img id="himAvatarPreview" alt="" hidden><span id="himPreviewEmpty">角</span></span><label class="upload-label">他的頭像<input id="himAvatarInput" type="file" accept="image/*"></label></div>
+            <div class="avatar-slot"><span class="avatar-preview"><img id="playerAvatarPreview" alt="" hidden><span id="playerPreviewEmpty">你</span></span><label class="upload-label">你的頭像<input id="playerAvatarInput" type="file" accept="image/*"></label></div>
+          </div>
+          <p id="avatarStatus" class="status" aria-live="polite">頭像會縮至 256 像素後儲存。</p>
+        </fieldset>
+        <fieldset>
+          <legend>攜帶資料</legend>
+          <div class="card-tools"><button id="exportMemoryButton" class="small-button" type="button">匯出記憶包</button><label class="upload-label">匯入<input id="memoryFileInput" type="file" accept=".json,.png,.md,.txt,application/json,image/png,text/plain,text/markdown"></label></div>
+        </fieldset>
+        <p class="privacy-mini">資料只存在這個瀏覽器的本站儲存空間。金鑰只會由你的瀏覽器直送你設定的 API 端點。</p>
+        <button id="clearButton" class="danger-button" type="button">清除所有資料</button>
+      </form>
+    </aside>
+  </div>
+  <script>
+  (() => {
+    "use strict";
+    const SIZE=15,EMPTY=0,BLACK=1,WHITE=2;
+    const DIRECTIONS=[[1,0],[0,1],[1,1],[1,-1]];
+    const STAR_POINTS=new Set(["3,3","3,11","7,7","11,3","11,11"]);
+    const STORE_PREFIX="publicGomoku_";
+    const SETTINGS_KEY=STORE_PREFIX+"settings_v1";
+    const SAVE_KEY=STORE_PREFIX+"save_v1";
+    const CHAT_KEY=STORE_PREFIX+"chat_v1";
+    const RECORD_KEY=STORE_PREFIX+"records_v1";
+    const COACH_ENABLED_KEY=STORE_PREFIX+"coachEnabled_v1";
+    const OPENING_DAY_KEY=STORE_PREFIX+"openingDay_v1";
+    const CHAMBRE_KEY="chambre_settings_v1";
+    const CHAMBRE_FIELDS=["endpoint","apiKey","model","characterName","characterDescription","playerName","avatarDataUrl","playerAvatarDataUrl"];
+    const CHAT_CAP=100,COACH_TIMEOUT_MS=20000;
+    const KAOMOJI=Object.freeze(["( ´ ▽ \u0060 )","(￣▽￣)","(・ω・)","(¬_¬)","(ง •̀_•́)ง","(｡•̀ᴗ-)","(╯°□°）╯","(づ｡◕‿‿◕｡)づ"]);
+    const elements=Object.fromEntries(Array.from(document.querySelectorAll("[id]")).map(node=>[node.id,node]));
+    const boardElement=elements.board,statusElement=elements.status,turnBadge=elements.turnBadge,modeSelect=elements.mode,difficultySelect=elements.difficulty,undoButton=elements.undo,newGameButton=elements.newGame;
+    let board=makeEmptyBoard(),currentPlayer=BLACK,gameOver=false,thinking=false,history=[],activeDifficulty=difficultySelect.value,aiTimer=null,hintMark=null;
+    let settings=readSettings(),coachEnabled=safeGet(COACH_ENABLED_KEY)!=="false",coachThinking=false,activeCoachController=null,coachTranscript=[],chatHistory=[],chatSending=false,lastCoachMoveNo=null,resultLogged=false,records=readRecords();
+    const coachRequestLog=[];
+
+    function safeGet(key){try{return localStorage.getItem(key);}catch(_error){return null;}}
+    function safeSet(key,value){try{localStorage.setItem(key,value);return true;}catch(_error){return false;}}
+    function readJson(key,fallback){try{const value=JSON.parse(safeGet(key)||"null");return value??fallback;}catch(_error){return fallback;}}
+    function defaultSettings(){return{endpoint:"",apiKey:"",model:"",characterName:"",characterDescription:"",playerName:"你",playerSkill:"beginner",avatarDataUrl:"",playerAvatarDataUrl:""};}
+    function readSettings(){
+      const own={...defaultSettings(),...readJson(SETTINGS_KEY,{})};
+      const shared=readJson(CHAMBRE_KEY,null);
+      if(shared&&typeof shared==="object"&&Number(shared.updatedAt||0)>Number(own.updatedAt||0)){
+        for(const field of CHAMBRE_FIELDS)if(typeof shared[field]==="string")own[field]=shared[field];
+        own.updatedAt=Number(shared.updatedAt);
+      }
+      return own;
+    }
+    function writeSettings(){
+      settings.updatedAt=Date.now();
+      safeSet(SETTINGS_KEY,JSON.stringify(settings));
+      const shared={v:1};
+      for(const field of CHAMBRE_FIELDS)shared[field]=settings[field]??"";
+      shared.updatedAt=settings.updatedAt;
+      safeSet(CHAMBRE_KEY,JSON.stringify(shared));
+    }
+    function settingsComplete(value=settings){return Boolean(value.endpoint.trim()&&value.apiKey.trim()&&value.model.trim()&&value.characterName.trim());}
+    function localDay(){return new Date(Date.now()-new Date().getTimezoneOffset()*60000-4*3600*1000).toISOString().slice(0,10);}
+    function blankRecords(){return{player:0,character:0,draw:0};}
+    function readRecords(){const raw=readJson(RECORD_KEY,{}),out=blankRecords();for(const key of Object.keys(out))if(Number.isInteger(raw?.[key])&&raw[key]>=0)out[key]=raw[key];return out;}
+    function makeEmptyBoard(){return Array.from({length:SIZE},()=>Array(SIZE).fill(EMPTY));}
+    function playerName(player){return player===BLACK?"黑棋":"白棋";}
+    function isInside(row,col){return row>=0&&row<SIZE&&col>=0&&col<SIZE;}
+    function pointNameOf(row,col){return String.fromCharCode(65+col)+(row+1);}
+    function sideWordOf(player){return player===BLACK?"玩家":"你";}
+    function moveFactOf(move){return move?sideWordOf(move.player)+"把"+(move.player===BLACK?"黑子":"白子")+"下在 "+pointNameOf(move.row,move.col):"";}
+
+    function createBoardView(){
+      const fragment=document.createDocumentFragment();
+      for(let row=0;row<SIZE;row+=1)for(let col=0;col<SIZE;col+=1){
+        const point=document.createElement("button");
+        point.type="button";point.className="point";point.dataset.row=String(row);point.dataset.col=String(col);point.setAttribute("role","gridcell");point.addEventListener("click",onPointClick);fragment.append(point);
+      }
+      boardElement.replaceChildren(fragment);renderBoard();
+    }
+    function renderBoard(){
+      const lastMove=history.at(-1)||null,points=boardElement.children;
+      for(let row=0;row<SIZE;row+=1)for(let col=0;col<SIZE;col+=1){
+        const point=points[row*SIZE+col],value=board[row][col];
+        point.replaceChildren();point.disabled=gameOver||thinking||value!==EMPTY;
+        point.setAttribute("aria-label",pointNameOf(row,col)+(value?"，"+playerName(value):"，空位"));
+        if(STAR_POINTS.has(row+","+col)&&value===EMPTY){const star=document.createElement("span");star.className="star";point.append(star);}
+        if(value!==EMPTY){const stone=document.createElement("span");stone.className="stone "+(value===BLACK?"black":"white");point.append(stone);}
+        if(lastMove&&lastMove.row===row&&lastMove.col===col){const mark=document.createElement("span");mark.className="last-mark";point.append(mark);}
+        if(hintMark&&hintMark.row===row&&hintMark.col===col&&value===EMPTY){const mark=document.createElement("span");mark.className="hint-mark";point.append(mark);}
+      }
+      updateStatus();undoButton.disabled=thinking||history.length===0;renderCoach();
+    }
+    function updateStatus(message=""){
+      if(message)statusElement.textContent=message;
+      else if(thinking)statusElement.textContent="角色正在思考…";
+      else if(!gameOver)statusElement.textContent="輪到"+playerName(currentPlayer)+(modeSelect.value==="computer"?(currentPlayer===BLACK?"（你）":"（角色）"):"");
+      turnBadge.textContent=gameOver?"本局結束":playerName(currentPlayer)+"回合";
+    }
+    function countAlong(row,col,rowStep,colStep,player){
+      let count=0,nextRow=row+rowStep,nextCol=col+colStep;
+      while(isInside(nextRow,nextCol)&&board[nextRow][nextCol]===player){count+=1;nextRow+=rowStep;nextCol+=colStep;}
+      return count;
+    }
+    function hasFiveFrom(row,col,player){return DIRECTIONS.some(([rs,cs])=>1+countAlong(row,col,rs,cs,player)+countAlong(row,col,-rs,-cs,player)>=5);}
+    function isBoardFull(){return history.length===SIZE*SIZE;}
+    function hasLiveWindow(player){
+      const opponent=player===BLACK?WHITE:BLACK;
+      for(const[rs,cs]of DIRECTIONS)for(let row=0;row<SIZE;row+=1)for(let col=0;col<SIZE;col+=1){
+        const endRow=row+rs*4,endCol=col+cs*4;if(!isInside(endRow,endCol))continue;
+        let blocked=false;for(let offset=0;offset<5;offset+=1)if(board[row+rs*offset][col+cs*offset]===opponent){blocked=true;break;}
+        if(!blocked)return true;
+      }
+      return false;
+    }
+    function isDeadPosition(){return!hasLiveWindow(BLACK)&&!hasLiveWindow(WHITE);}
+    function scanSide(row,col,rowStep,colStep,player){
+      let stones=0,nextRow=row+rowStep,nextCol=col+colStep;
+      while(isInside(nextRow,nextCol)&&board[nextRow][nextCol]===player){stones+=1;nextRow+=rowStep;nextCol+=colStep;}
+      return{stones,open:isInside(nextRow,nextCol)&&board[nextRow][nextCol]===EMPTY?1:0};
+    }
+    function patternScore(stones,openEnds){
+      if(stones>=5)return 10000000;if(stones===4&&openEnds===2)return 1000000;if(stones===4&&openEnds===1)return 220000;
+      if(stones===3&&openEnds===2)return 55000;if(stones===3&&openEnds===1)return 8000;if(stones===2&&openEnds===2)return 2200;
+      if(stones===2&&openEnds===1)return 320;if(stones===1&&openEnds===2)return 90;return 8;
+    }
+    function evaluatePoint(row,col,player){
+      if(board[row][col]!==EMPTY)return-Infinity;let score=0;
+      for(const[rs,cs]of DIRECTIONS){const forward=scanSide(row,col,rs,cs,player),backward=scanSide(row,col,-rs,-cs,player);score+=patternScore(1+forward.stones+backward.stones,forward.open+backward.open);}
+      return score+Math.max(0,14-(Math.abs(row-7)+Math.abs(col-7)));
+    }
+    function emptyPoints(){const points=[];for(let row=0;row<SIZE;row+=1)for(let col=0;col<SIZE;col+=1)if(board[row][col]===EMPTY)points.push({row,col});return points;}
+    function bestReplyScore(player){let best=0;for(const point of emptyPoints())best=Math.max(best,evaluatePoint(point.row,point.col,player));return best;}
+    /* 高手引擎＝家版 web/gomoku.html 引擎段原封搬入（2026-09-05 第三檔「高手」＋局末複盤）；搜尋／VCF／VCT／關鍵手分析全在段內 */
+    /* GOMOKU-ENGINE-BEGIN */
+    /* 高手引擎（2026-09-05 建）——純函式、零 DOM、零頁面狀態：
+       盤面一律 15×15 二維陣列（0 空／1 黑／2 白）由參數傳入，輪到誰、時間上限也全走參數。
+       主窗要搬去公開版 index.html，整段複製這兩個標記之間即可（含這兩行註解）。 */
+    const GOMOKU_ENGINE = (function () {
+      'use strict';
+
+      const SIZE = 15;
+      const EMPTY = 0;
+      const BLACK = 1;
+      const WHITE = 2;
+      const DIRS = [[0, 1], [1, 0], [1, 1], [1, -1]];
+
+      const SCORE = {
+        WIN: 50000000,        // 終局分（比任何型態分都大，供搜尋分辨勝負與步數遠近）
+        FIVE: 10000000,
+        OPEN_FOUR: 1000000,
+        FOUR: 100000,         // 衝四／眠四：有一個連五點
+        OPEN_THREE: 50000,    // 活三（含跳三 X_XX）：一步可成活四
+        SLEEP_THREE: 5000,
+        OPEN_TWO: 2000,
+        SLEEP_TWO: 200,
+        ONE: 20
+      };
+
+      // 型態表：own 視角字串（x 自己／. 空／# 對手或牆），照優先序比對；
+      // 命中就把那幾顆 x 標記吃掉 —— 同一叢棋子只算最高型態一次，被封死的三、四自然掉到 ONE。
+      const PATTERNS = [
+        ['xxxxx', SCORE.FIVE, 'five'],
+        ['.xxxx.', SCORE.OPEN_FOUR, 'openFour'],
+        ['xxxx.', SCORE.FOUR, 'four'],
+        ['.xxxx', SCORE.FOUR, 'four'],
+        ['xxx.x', SCORE.FOUR, 'four'],
+        ['x.xxx', SCORE.FOUR, 'four'],
+        ['xx.xx', SCORE.FOUR, 'four'],
+        ['..xxx.', SCORE.OPEN_THREE, 'openThree'],
+        ['.xxx..', SCORE.OPEN_THREE, 'openThree'],
+        ['.x.xx.', SCORE.OPEN_THREE, 'openThree'],
+        ['.xx.x.', SCORE.OPEN_THREE, 'openThree'],
+        ['.xxx.', SCORE.SLEEP_THREE, 'sleepThree'],
+        ['xxx..', SCORE.SLEEP_THREE, 'sleepThree'],
+        ['..xxx', SCORE.SLEEP_THREE, 'sleepThree'],
+        ['xxx.', SCORE.SLEEP_THREE, 'sleepThree'],
+        ['.xxx', SCORE.SLEEP_THREE, 'sleepThree'],
+        ['xx.x.', SCORE.SLEEP_THREE, 'sleepThree'],
+        ['.x.xx', SCORE.SLEEP_THREE, 'sleepThree'],
+        ['x.xx.', SCORE.SLEEP_THREE, 'sleepThree'],
+        ['.xx.x', SCORE.SLEEP_THREE, 'sleepThree'],
+        ['xx..x', SCORE.SLEEP_THREE, 'sleepThree'],
+        ['x..xx', SCORE.SLEEP_THREE, 'sleepThree'],
+        ['x.x.x', SCORE.SLEEP_THREE, 'sleepThree'],
+        ['..xx..', SCORE.OPEN_TWO, 'openTwo'],
+        ['.x.x.', SCORE.OPEN_TWO, 'openTwo'],
+        ['.x..x.', SCORE.OPEN_TWO, 'openTwo'],
+        ['.xx.', SCORE.OPEN_TWO, 'openTwo'],
+        ['xx.', SCORE.SLEEP_TWO, 'sleepTwo'],
+        ['.xx', SCORE.SLEEP_TWO, 'sleepTwo'],
+        ['x.x', SCORE.SLEEP_TWO, 'sleepTwo'],
+        ['x..x', SCORE.SLEEP_TWO, 'sleepTwo'],
+        ['x', SCORE.ONE, 'one']
+      ];
+
+      const defaultNow = (typeof performance !== 'undefined' && performance && typeof performance.now === 'function')
+        ? function () { return performance.now(); }
+        : function () { return Date.now(); };
+
+      let defenseWeight = 1.05;   // 守方權重（自對弈調權用，見 tune()）
+      let quietDefense = 1;       // 對手沒三沒四時的守方權重折扣（<1＝安全局面轉進攻）
+      let openTwoBonus = 900;     // 活二每條的收尾分（VCT 的柴火）
+      let developBonus = 1800;    // 排序：一手同時長進兩條線以上的加分
+
+      // ── 盤面小工具 ────────────────────────────────────────────
+      function inside(row, col) { return row >= 0 && row < SIZE && col >= 0 && col < SIZE; }
+      function other(player) { return player === BLACK ? WHITE : BLACK; }
+      function emptyBoard() { return Array.from({ length: SIZE }, () => new Array(SIZE).fill(EMPTY)); }
+      function cloneBoard(board) { return board.map(row => row.slice()); }
+      function pointName(row, col) { return String.fromCharCode(65 + col) + (row + 1); }
+
+      function countStones(board) {
+        let total = 0;
+        for (let row = 0; row < SIZE; row += 1) {
+          for (let col = 0; col < SIZE; col += 1) if (board[row][col] !== EMPTY) total += 1;
+        }
+        return total;
+      }
+
+      function isBoardFull(board) { return countStones(board) === SIZE * SIZE; }
+
+      function winsAt(board, row, col, player) {
+        for (let d = 0; d < DIRS.length; d += 1) {
+          const rowStep = DIRS[d][0];
+          const colStep = DIRS[d][1];
+          let count = 1;
+          for (let step = 1; step <= 4; step += 1) {
+            const r = row + rowStep * step, c = col + colStep * step;
+            if (!inside(r, c) || board[r][c] !== player) break;
+            count += 1;
+          }
+          for (let step = 1; step <= 4; step += 1) {
+            const r = row - rowStep * step, c = col - colStep * step;
+            if (!inside(r, c) || board[r][c] !== player) break;
+            count += 1;
+          }
+          if (count >= 5) return true;
+        }
+        return false;
+      }
+
+      function hasLiveWindow(board, player) {
+        const opponent = other(player);
+        for (let d = 0; d < DIRS.length; d += 1) {
+          const rowStep = DIRS[d][0], colStep = DIRS[d][1];
+          for (let row = 0; row < SIZE; row += 1) {
+            for (let col = 0; col < SIZE; col += 1) {
+              if (!inside(row + rowStep * 4, col + colStep * 4)) continue;
+              let blocked = false;
+              for (let offset = 0; offset < 5; offset += 1) {
+                if (board[row + rowStep * offset][col + colStep * offset] === opponent) { blocked = true; break; }
+              }
+              if (!blocked) return true;
+            }
+          }
+        }
+        return false;
+      }
+
+      function isDeadPosition(board) { return !hasLiveWindow(board, BLACK) && !hasLiveWindow(board, WHITE); }
+
+      // ── 型態分析：整條線一次讀完，跳三、眠四、死型都分得出來 ────
+      const lineAnalysisCache = new Map();
+
+      function analyzeOwn(text) {
+        const cached = lineAnalysisCache.get(text);
+        if (cached) return cached;
+        const used = new Array(text.length).fill(false);
+        const result = { score: 0, five: 0, openFour: 0, four: 0, openThree: 0, sleepThree: 0, openTwo: 0, fivePoints: [] };
+        for (let pi = 0; pi < PATTERNS.length; pi += 1) {
+          const pattern = PATTERNS[pi][0];
+          const value = PATTERNS[pi][1];
+          const key = PATTERNS[pi][2];
+          const length = pattern.length;
+          for (let i = 0; i + length <= text.length; i += 1) {
+            let ok = true;
+            for (let k = 0; k < length; k += 1) {
+              const want = pattern[k];
+              const ch = text[i + k];
+              if (want === 'x') { if (ch !== 'x' || used[i + k]) { ok = false; break; } }
+              else if (ch !== '.') { ok = false; break; }
+            }
+            if (!ok) continue;
+            for (let k = 0; k < length; k += 1) if (pattern[k] === 'x') used[i + k] = true;
+            result.score += value;
+            if (result[key] !== undefined) result[key] += 1;
+          }
+        }
+        // 連五點：填進去就直接成五的空格（含跳點，所以 X_XX 這種看得見）
+        for (let i = 0; i < text.length; i += 1) {
+          if (text[i] !== '.') continue;
+          for (let start = i - 4; start <= i; start += 1) {
+            if (start < 0 || start + 5 > text.length) continue;
+            let own = 0, gaps = 0, blocked = false;
+            for (let k = 0; k < 5; k += 1) {
+              const ch = text[start + k];
+              if (ch === 'x') own += 1;
+              else if (ch === '.') gaps += 1;
+              else { blocked = true; break; }
+            }
+            if (!blocked && own === 4 && gaps === 1) { result.fivePoints.push(i); break; }
+          }
+        }
+        if (lineAnalysisCache.size > 200000) lineAnalysisCache.clear();
+        lineAnalysisCache.set(text, result);
+        return result;
+      }
+
+      const LINES = (function () {
+        const lines = [];
+        for (let d = 0; d < DIRS.length; d += 1) {
+          const rowStep = DIRS[d][0], colStep = DIRS[d][1];
+          for (let row = 0; row < SIZE; row += 1) {
+            for (let col = 0; col < SIZE; col += 1) {
+              if (inside(row - rowStep, col - colStep)) continue;   // 不是線頭就跳過
+              const cells = [];
+              let r = row, c = col;
+              while (inside(r, c)) { cells.push([r, c]); r += rowStep; c += colStep; }
+              if (cells.length >= 5) lines.push(cells);
+            }
+          }
+        }
+        return lines;
+      })();
+
+      const lineReportCache = new Map();
+
+      function ownText(codes, player) {
+        let text = '#';
+        for (let i = 0; i < codes.length; i += 1) {
+          const value = codes.charCodeAt(i) - 48;
+          text += value === EMPTY ? '.' : (value === player ? 'x' : '#');
+        }
+        return text + '#';
+      }
+
+      function lineReport(codes, player) {
+        const key = player + codes;
+        let analysis = lineReportCache.get(key);
+        if (!analysis) {
+          analysis = analyzeOwn(ownText(codes, player));
+          if (lineReportCache.size > 200000) lineReportCache.clear();
+          lineReportCache.set(key, analysis);
+        }
+        return analysis;
+      }
+
+      function newSideReport() {
+        return { score: 0, five: 0, openFour: 0, four: 0, openThree: 0, sleepThree: 0, openTwo: 0, fivePoints: [] };
+      }
+
+      // 整盤評估：雙方所有線型加總；順手交出連五點清單（強制回應層直接用）
+      function boardReport(board) {
+        const report = { 1: newSideReport(), 2: newSideReport() };
+        const seen = { 1: new Set(), 2: new Set() };
+        for (let li = 0; li < LINES.length; li += 1) {
+          const cells = LINES[li];
+          let codes = '';
+          let hasBlack = false, hasWhite = false;
+          for (let i = 0; i < cells.length; i += 1) {
+            const value = board[cells[i][0]][cells[i][1]];
+            codes += value;
+            if (value === BLACK) hasBlack = true;
+            else if (value === WHITE) hasWhite = true;
+          }
+          if (!hasBlack && !hasWhite) continue;
+          for (let s = 0; s < 2; s += 1) {
+            const player = s === 0 ? BLACK : WHITE;
+            if (player === BLACK ? !hasBlack : !hasWhite) continue;
+            const analysis = lineReport(codes, player);
+            const bucket = report[player];
+            bucket.score += analysis.score;
+            bucket.five += analysis.five;
+            bucket.openFour += analysis.openFour;
+            bucket.four += analysis.four;
+            bucket.openThree += analysis.openThree;
+            bucket.sleepThree += analysis.sleepThree;
+            bucket.openTwo += analysis.openTwo;
+            for (let fi = 0; fi < analysis.fivePoints.length; fi += 1) {
+              const cell = cells[analysis.fivePoints[fi] - 1];   // -1＝脫掉字串頭的 '#'
+              const key = cell[0] * SIZE + cell[1];
+              if (!seen[player].has(key)) {
+                seen[player].add(key);
+                bucket.fivePoints.push({ row: cell[0], col: cell[1] });
+              }
+            }
+          }
+        }
+        return report;
+      }
+
+      // 組合型態：雙活三、四三、雙四——單條線加總看不出來的殺著，在這裡補分
+      function comboBonus(side) {
+        let bonus = 0;
+        if (side.four >= 2) bonus += 600000;
+        if (side.four >= 1 && side.openThree >= 1) bonus += 400000;
+        if (side.openThree >= 2) bonus += 200000;
+        // 收尾意識（2026-09-05）：活二／眠三是 VCT 的柴火，堆得起來才有連續威脅可發。
+        // 量級刻意壓在活三（50000）以下，只在非強制局面裡決定「往哪長」，不會蓋掉殺著判斷。
+        if (side.openThree >= 1 && side.openTwo >= 1) bonus += 6000;
+        if (side.sleepThree >= 1 && side.openTwo >= 1) bonus += 1200;
+        bonus += Math.min(side.openTwo, 4) * openTwoBonus;
+        return bonus;
+      }
+
+      function scoreFromReport(report, player) {
+        const me = report[player];
+        const you = report[other(player)];
+        if (me.five > 0) return SCORE.WIN;
+        if (you.five > 0) return -SCORE.WIN;
+        // 對手沒有三也沒有四＝安全局面：這時候該去做自己的形，守方權重折一折，
+        // 不然兩邊互相跟著擋，棋盤填滿變死局判和（第一單 20 局有 6 局就是這樣和掉的）
+        const weight = (you.four > 0 || you.openThree > 0) ? defenseWeight : defenseWeight * quietDefense;
+        return (me.score + comboBonus(me)) - Math.round((you.score + comboBonus(you)) * weight);
+      }
+
+      function evaluateBoard(board, player) { return scoreFromReport(boardReport(board), player); }
+
+      // ── 候選點與排序 ──────────────────────────────────────────
+      function neighborEmpties(board, distance, owner) {
+        const mark = new Uint8Array(SIZE * SIZE);
+        const cells = [];
+        for (let row = 0; row < SIZE; row += 1) {
+          for (let col = 0; col < SIZE; col += 1) {
+            const value = board[row][col];
+            if (value === EMPTY) continue;
+            if (owner && value !== owner) continue;
+            for (let dr = -distance; dr <= distance; dr += 1) {
+              for (let dc = -distance; dc <= distance; dc += 1) {
+                const r = row + dr, c = col + dc;
+                if (!inside(r, c) || board[r][c] !== EMPTY) continue;
+                const key = r * SIZE + c;
+                if (mark[key]) continue;
+                mark[key] = 1;
+                cells.push({ row: r, col: c });
+              }
+            }
+          }
+        }
+        return cells;
+      }
+
+      function windowText(board, row, col, rowStep, colStep, player) {
+        let text = '#';
+        for (let k = -4; k <= 4; k += 1) {
+          const r = row + rowStep * k, c = col + colStep * k;
+          if (!inside(r, c)) { text += '#'; continue; }
+          const value = board[r][c];
+          text += value === EMPTY ? '.' : (value === player ? 'x' : '#');
+        }
+        return text + '#';
+      }
+
+      // 落在這點對 player 的局部收益（攻＋守排序用，只讀穿過該點的四條線）；
+      // lines＝這手同時長進幾條線，兩線以上＝能發展成雙威脅的形，排序時加分（收尾意識）
+      function localProfile(board, row, col, player) {
+        const previous = board[row][col];
+        board[row][col] = player;
+        let score = 0, lines = 0;
+        for (let d = 0; d < DIRS.length; d += 1) {
+          const analysis = analyzeOwn(windowText(board, row, col, DIRS[d][0], DIRS[d][1], player));
+          score += analysis.score;
+          if (analysis.four > 0 || analysis.openThree > 0 || analysis.openTwo > 0) lines += 1;
+        }
+        board[row][col] = previous;
+        return { score, lines };
+      }
+
+      function localGain(board, row, col, player) { return localProfile(board, row, col, player).score; }
+
+      function orderedMoves(board, player, report, width) {
+        const opponent = other(player);
+        if (report[player].fivePoints.length) return [report[player].fivePoints[0]];
+        // 對手有連五點＝必擋（擋不完就挑一個擋，至少不自己送）
+        if (report[opponent].fivePoints.length) return report[opponent].fivePoints.slice(0, 2);
+        const cells = neighborEmpties(board, 2);
+        if (!cells.length) return [];
+        for (let i = 0; i < cells.length; i += 1) {
+          const mine = localProfile(board, cells[i].row, cells[i].col, player);
+          const yours = localProfile(board, cells[i].row, cells[i].col, opponent);
+          cells[i].value = mine.score + yours.score
+            + (mine.lines >= 2 ? (mine.lines - 1) * developBonus : 0)
+            + (yours.lines >= 2 ? (yours.lines - 1) * Math.round(developBonus / 2) : 0);
+        }
+        cells.sort((a, b) => b.value - a.value);
+        return cells.slice(0, width);
+      }
+
+      // ── 殺棋層：四的完整情報＋VCF（連續衝四殺到底）────────────
+      // 前提：(row,col) 已經放上 player 的子
+      function fourInfoAt(board, row, col, player) {
+        let win = false;
+        const fivePoints = [];
+        const seen = new Set();
+        for (let d = 0; d < DIRS.length; d += 1) {
+          const rowStep = DIRS[d][0], colStep = DIRS[d][1];
+          for (let start = -4; start <= 0; start += 1) {
+            let own = 0, blocked = false;
+            let gapRow = -1, gapCol = -1, gaps = 0;
+            for (let k = 0; k < 5; k += 1) {
+              const r = row + rowStep * (start + k), c = col + colStep * (start + k);
+              if (!inside(r, c)) { blocked = true; break; }
+              const value = board[r][c];
+              if (value === player) own += 1;
+              else if (value === EMPTY) { gaps += 1; gapRow = r; gapCol = c; }
+              else { blocked = true; break; }
+            }
+            if (blocked) continue;
+            if (own === 5) { win = true; continue; }
+            if (own === 4 && gaps === 1) {
+              const key = gapRow * SIZE + gapCol;
+              if (!seen.has(key)) { seen.add(key); fivePoints.push({ row: gapRow, col: gapCol }); }
+            }
+          }
+        }
+        return { win, fivePoints };
+      }
+
+      function fourRank(move) { return move.win ? 3 : (move.fivePoints.length >= 2 ? 2 : 1); }
+
+      // 所有「做出四」的手：落下去之後至少多出一個連五點
+      function fourMovesOf(board, player) {
+        const moves = [];
+        const cells = neighborEmpties(board, 2, player);
+        for (let i = 0; i < cells.length; i += 1) {
+          const cell = cells[i];
+          board[cell.row][cell.col] = player;
+          const info = fourInfoAt(board, cell.row, cell.col, player);
+          board[cell.row][cell.col] = EMPTY;
+          if (info.win) moves.push({ row: cell.row, col: cell.col, win: true, fivePoints: [] });
+          else if (info.fivePoints.length) moves.push({ row: cell.row, col: cell.col, win: false, fivePoints: info.fivePoints });
+        }
+        moves.sort((a, b) => fourRank(b) - fourRank(a));
+        return moves;
+      }
+
+      // VCF：只走衝四，對手每手被逼著擋，一路連到五
+      function vcfSearch(board, player, depth, context) {
+        if (depth <= 0) return null;
+        context.nodes += 1;
+        if (context.nodes > context.nodeLimit || context.now() > context.deadline) { context.aborted = true; return null; }
+        const opponent = other(player);
+        const moves = fourMovesOf(board, player);
+        for (let i = 0; i < moves.length; i += 1) {
+          const move = moves[i];
+          if (move.win || move.fivePoints.length >= 2) return [{ row: move.row, col: move.col }];
+          const block = move.fivePoints[0];
+          board[move.row][move.col] = player;
+          board[block.row][block.col] = opponent;
+          let sub = null;
+          // 對手擋的那手若自己成五、或順手做出四，這條線就不算強迫了
+          if (!winsAt(board, block.row, block.col, opponent)
+            && fourInfoAt(board, block.row, block.col, opponent).fivePoints.length === 0) {
+            sub = vcfSearch(board, player, depth - 1, context);
+          }
+          board[block.row][block.col] = EMPTY;
+          board[move.row][move.col] = EMPTY;
+          if (sub) return [{ row: move.row, col: move.col }].concat(sub);
+          if (context.aborted) return null;
+        }
+        return null;
+      }
+
+      function findVcf(board, player, options) {
+        const opts = options || {};
+        const now = opts.now || defaultNow;
+        const context = {
+          nodes: 0,
+          nodeLimit: opts.nodeLimit || 20000,
+          deadline: opts.deadline !== undefined ? opts.deadline : now() + (opts.timeLimitMs || 220),
+          now,
+          aborted: false
+        };
+        const sequence = vcfSearch(board, player, opts.maxDepth || 8, context);
+        return sequence ? { moves: sequence, nodes: context.nodes, aborted: context.aborted } : null;
+      }
+
+      // ── VCT：連續威脅（活三／衝四）殺法 ────────────────────────
+      /* 2026-09-05 加。VCF 只走衝四，對「永遠擋最大威脅」的守方攻不進去（自對弈 65% 全是死局判和）；
+         VCT 攻方每步走活三或衝四，守方被逼著回應，一路逼進雙活三／四三。
+         攻方節點只列威脅手、守方節點列「所有解得掉威脅的點」——守方要全部試過都失敗才算殺成立。 */
+
+      // 這一側現在有幾個「填下去就成五」的點（早退：問到 limit 個就夠判斷了）
+      function fivePointsQuick(board, player, limit) {
+        const cap = limit || 2;
+        const points = [];
+        const cells = neighborEmpties(board, 1, player);
+        for (let i = 0; i < cells.length; i += 1) {
+          const cell = cells[i];
+          board[cell.row][cell.col] = player;
+          const win = winsAt(board, cell.row, cell.col, player);
+          board[cell.row][cell.col] = EMPTY;
+          if (win) {
+            points.push({ row: cell.row, col: cell.col });
+            if (points.length >= cap) break;
+          }
+        }
+        return points;
+      }
+
+      // 前提：(row,col) 已經放上 player 的子。回傳「這一手新做出活三」的方向索引。
+      function openThreeDirections(board, row, col, player) {
+        const dirs = [];
+        for (let d = 0; d < DIRS.length; d += 1) {
+          const rowStep = DIRS[d][0], colStep = DIRS[d][1];
+          board[row][col] = EMPTY;
+          const before = analyzeOwn(windowText(board, row, col, rowStep, colStep, player)).openThree;
+          board[row][col] = player;
+          const after = analyzeOwn(windowText(board, row, col, rowStep, colStep, player)).openThree;
+          if (after > before) dirs.push(d);
+        }
+        return dirs;
+      }
+
+      // 單條線上：攻方還能不能一步做出「擋不完的四」（活四或兩個連五點）
+      const openFourAbilityCache = new Map();
+      function canMakeOpenFourInLine(text) {
+        const cached = openFourAbilityCache.get(text);
+        if (cached !== undefined) return cached;
+        let able = false;
+        for (let i = 0; i < text.length; i += 1) {
+          if (text[i] !== '.') continue;
+          const analysis = analyzeOwn(text.slice(0, i) + 'x' + text.slice(i + 1));
+          if (analysis.openFour > 0 || analysis.fivePoints.length >= 2) { able = true; break; }
+        }
+        if (openFourAbilityCache.size > 200000) openFourAbilityCache.clear();
+        openFourAbilityCache.set(text, able);
+        return able;
+      }
+
+      // 單條線上的解法點：守方填這裡，攻方就做不出活四（活三的兩到三個擋點都在裡面）
+      const lineDefenseCache = new Map();
+      function lineDefensePoints(text) {
+        const cached = lineDefenseCache.get(text);
+        if (cached) return cached;
+        const points = [];
+        for (let i = 0; i < text.length; i += 1) {
+          if (text[i] !== '.') continue;
+          if (!canMakeOpenFourInLine(text.slice(0, i) + '#' + text.slice(i + 1))) points.push(i);
+        }
+        if (lineDefenseCache.size > 200000) lineDefenseCache.clear();
+        lineDefenseCache.set(text, points);
+        return points;
+      }
+
+      // 威脅手：落下去之後做出四或活三。rank 6 成五／5 雙四／4 四三／3 雙活三／2 衝四／1 活三
+      function threatMovesOf(board, player, fourOnly) {
+        const moves = [];
+        const cells = neighborEmpties(board, 2, player);
+        for (let i = 0; i < cells.length; i += 1) {
+          const cell = cells[i];
+          board[cell.row][cell.col] = player;
+          const info = fourInfoAt(board, cell.row, cell.col, player);
+          const fours = info.fivePoints.length;
+          let threes = 0;
+          if (!info.win && (fours > 0 || !fourOnly)) threes = openThreeDirections(board, cell.row, cell.col, player).length;
+          board[cell.row][cell.col] = EMPTY;
+          if (info.win) { moves.push({ row: cell.row, col: cell.col, win: true, rank: 6 }); continue; }
+          if (fours === 0 && (fourOnly || threes === 0)) continue;
+          let rank;
+          if (fours >= 2) rank = 5;
+          else if (fours === 1 && threes >= 1) rank = 4;
+          else if (threes >= 2) rank = 3;
+          else if (fours === 1) rank = 2;
+          else rank = 1;
+          moves.push({ row: cell.row, col: cell.col, win: false, rank, fivePoints: info.fivePoints, threes });
+        }
+        moves.sort((a, b) => b.rank - a.rank);
+        return moves;
+      }
+
+      function vctBudgetOk(context) {
+        context.nodes += 1;
+        if (context.nodes > context.nodeLimit || context.now() > context.deadline) { context.aborted = true; return false; }
+        return true;
+      }
+
+      // 攻方節點：只走威脅手。回傳攻擊序列（第一手才是要走的），null＝攻不進去
+      function vctAttack(board, attacker, defender, depth, context) {
+        if (!vctBudgetOk(context)) return null;
+        if (depth <= 0) return null;
+
+        // 守方盤上留著四：只能先擋，而且擋的那手自己也得是威脅，不然先手就交出去了
+        const defFive = fivePointsQuick(board, defender, 2);
+        if (defFive.length) {
+          if (defFive.length >= 2) return null;
+          const block = defFive[0];
+          board[block.row][block.col] = attacker;
+          const info = fourInfoAt(board, block.row, block.col, attacker);
+          let sub = null;
+          if (info.win) sub = [];
+          else if (info.fivePoints.length >= 1 || openThreeDirections(board, block.row, block.col, attacker).length >= 1) {
+            sub = vctDefend(board, attacker, defender, block.row, block.col, depth - 1, context);
+          }
+          board[block.row][block.col] = EMPTY;
+          return sub ? [{ row: block.row, col: block.col }].concat(sub) : null;
+        }
+
+        const fourOnly = depth <= context.threeFloor;
+        const moves = threatMovesOf(board, attacker, fourOnly);
+        const limit = Math.min(moves.length, fourOnly ? context.narrowWidth : context.wideWidth);
+        for (let i = 0; i < limit; i += 1) {
+          const move = moves[i];
+          if (move.win) return [{ row: move.row, col: move.col }];
+          board[move.row][move.col] = attacker;
+          const sub = vctDefend(board, attacker, defender, move.row, move.col, depth - 1, context);
+          board[move.row][move.col] = EMPTY;
+          if (sub) return [{ row: move.row, col: move.col }].concat(sub);
+          if (context.aborted) return null;
+        }
+        return null;
+      }
+
+      // 守方節點：攻方剛下在 (lastRow,lastCol)。回傳 []＝所有解法都擋不住（殺成立）、null＝守得住
+      function vctDefend(board, attacker, defender, lastRow, lastCol, depth, context) {
+        if (!vctBudgetOk(context)) return null;
+        const atk = fourInfoAt(board, lastRow, lastCol, attacker);
+        if (atk.win) return [];
+        if (fivePointsQuick(board, defender, 1).length) return null;   // 守方能先成五，攻勢作廢
+        if (atk.fivePoints.length >= 2) return [];                     // 擋不完的四
+
+        let defenses;
+        if (atk.fivePoints.length === 1) {
+          defenses = [atk.fivePoints[0]];                              // 有四只能擋，反四沒用（攻方直接成五）
+        } else {
+          const dirs = openThreeDirections(board, lastRow, lastCol, attacker);
+          if (!dirs.length) return null;                               // 這手根本不是威脅，不算連續攻擊
+          defenses = [];
+          const seen = new Set();
+          for (let di = 0; di < dirs.length; di += 1) {
+            const rowStep = DIRS[dirs[di]][0], colStep = DIRS[dirs[di]][1];
+            const text = windowText(board, lastRow, lastCol, rowStep, colStep, attacker);
+            const idx = lineDefensePoints(text);
+            for (let k = 0; k < idx.length; k += 1) {
+              const offset = idx[k] - 5;                               // text[5]＝落子點（'#' 頭 + k=-4…4）
+              const r = lastRow + rowStep * offset, c = lastCol + colStep * offset;
+              if (!inside(r, c) || board[r][c] !== EMPTY) continue;
+              const key = r * SIZE + c;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              defenses.push({ row: r, col: c });
+            }
+          }
+          // 守方反衝四＝搶回先手，也是一種解法
+          const counters = fourMovesOf(board, defender);
+          for (let i = 0; i < counters.length && i < 3; i += 1) {
+            const key = counters[i].row * SIZE + counters[i].col;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            defenses.push({ row: counters[i].row, col: counters[i].col });
+          }
+          if (!defenses.length) return [];                             // 雙活三之類，解不掉
+        }
+        if (depth <= 0) return null;
+
+        for (let i = 0; i < defenses.length; i += 1) {
+          const point = defenses[i];
+          board[point.row][point.col] = defender;
+          const sub = vctAttack(board, attacker, defender, depth - 1, context);
+          board[point.row][point.col] = EMPTY;
+          if (context.aborted) return null;
+          if (!sub) return null;                                       // 這個解法擋住了
+        }
+        return [];
+      }
+
+      function findVct(board, player, options) {
+        const opts = options || {};
+        const now = opts.now || defaultNow;
+        const deadline = opts.deadline !== undefined ? opts.deadline : now() + (opts.timeLimitMs || 350);
+        const context = {
+          nodes: 0,
+          nodeLimit: opts.nodeLimit || 14000,
+          deadline, now, aborted: false,
+          wideWidth: opts.width || 10,
+          narrowWidth: opts.narrowWidth || 6,
+          threeFloor: opts.threeFloor === undefined ? 4 : opts.threeFloor
+        };
+        const maxDepth = opts.maxDepth || 11;
+        // 迭代加深：先找短殺，長殺才往下挖，免得在必敗的深枝上把預算燒光
+        for (let depth = 5; depth <= maxDepth; depth += 2) {
+          const sequence = vctAttack(board, player, other(player), depth, context);
+          if (sequence && sequence.length) return { moves: sequence, nodes: context.nodes, depth, aborted: context.aborted };
+          if (context.aborted || now() > deadline) break;
+        }
+        return null;
+      }
+
+      // 破對方 VCT 要優先看的點：他的起手威脅點，加上那手的擋點
+      function vctGuardPoints(board, player, first) {
+        const points = [{ row: first.row, col: first.col }];
+        const seen = new Set([first.row * SIZE + first.col]);
+        board[first.row][first.col] = player;
+        const info = fourInfoAt(board, first.row, first.col, player);
+        const targets = [];
+        for (let i = 0; i < info.fivePoints.length; i += 1) targets.push(info.fivePoints[i]);
+        if (!info.fivePoints.length) {
+          const dirs = openThreeDirections(board, first.row, first.col, player);
+          for (let di = 0; di < dirs.length; di += 1) {
+            const rowStep = DIRS[dirs[di]][0], colStep = DIRS[dirs[di]][1];
+            const idx = lineDefensePoints(windowText(board, first.row, first.col, rowStep, colStep, player));
+            for (let k = 0; k < idx.length; k += 1) {
+              const offset = idx[k] - 5;
+              targets.push({ row: first.row + rowStep * offset, col: first.col + colStep * offset });
+            }
+          }
+        }
+        board[first.row][first.col] = EMPTY;
+        for (let i = 0; i < targets.length; i += 1) {
+          const point = targets[i];
+          if (!inside(point.row, point.col) || board[point.row][point.col] !== EMPTY) continue;
+          const key = point.row * SIZE + point.col;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          points.push({ row: point.row, col: point.col });
+        }
+        return points;
+      }
+
+      // ── alpha-beta（negamax）＋迭代加深 ───────────────────────
+      function negamax(board, player, depth, alpha, beta, ply, context) {
+        context.nodes += 1;
+        if ((context.nodes & 63) === 0 && context.now() > context.deadline) { context.timeout = true; return 0; }
+        const report = boardReport(board);
+        if (report[player].five > 0) return SCORE.WIN - ply;
+        if (report[other(player)].five > 0) return -(SCORE.WIN - ply);
+        if (context.stones + ply >= 100 && isDeadPosition(board)) return 0;
+        if (depth <= 0) return scoreFromReport(report, player);
+        const moves = ply === 0 && context.rootMoves
+          ? context.rootMoves
+          : orderedMoves(board, player, report, depth >= 4 ? context.width : Math.max(6, context.width - 4));
+        if (!moves.length) return 0;
+        let best = -Infinity;
+        for (let i = 0; i < moves.length; i += 1) {
+          const move = moves[i];
+          board[move.row][move.col] = player;
+          let value;
+          if (winsAt(board, move.row, move.col, player)) value = SCORE.WIN - (ply + 1);
+          else value = -negamax(board, other(player), depth - 1, -beta, -alpha, ply + 1, context);
+          board[move.row][move.col] = EMPTY;
+          if (context.timeout) return best === -Infinity ? 0 : best;
+          if (value > best) {
+            best = value;
+            if (ply === 0) { context.bestMove = move; context.bestValue = value; }
+          }
+          if (value > alpha) alpha = value;
+          if (alpha >= beta) break;
+        }
+        return best;
+      }
+
+      function searchMove(board, player, options) {
+        const opts = options || {};
+        const now = opts.now || defaultNow;
+        const deadline = opts.deadline !== undefined ? opts.deadline : now() + (opts.timeLimitMs || 600);
+        const maxDepth = opts.maxDepth || 6;
+        const context = {
+          nodes: 0, now, deadline, timeout: false,
+          width: opts.width || 14,
+          stones: countStones(board),
+          rootMoves: opts.rootMoves || null,
+          bestMove: null, bestValue: 0
+        };
+        let chosen = null, chosenValue = 0, reached = 0, totalNodes = 0;
+        for (let depth = 2; depth <= maxDepth; depth += 2) {
+          context.bestMove = null;
+          context.timeout = false;
+          negamax(board, player, depth, -Infinity, Infinity, 0, context);
+          totalNodes = context.nodes;
+          if (context.timeout) break;
+          if (context.bestMove) { chosen = context.bestMove; chosenValue = context.bestValue; reached = depth; }
+          if (chosenValue >= SCORE.WIN - 100 || now() > deadline) break;
+        }
+        if (!chosen && context.bestMove) { chosen = context.bestMove; chosenValue = context.bestValue; reached = 1; }
+        return { move: chosen ? { row: chosen.row, col: chosen.col } : null, value: chosenValue, depth: reached, nodes: totalNodes };
+      }
+
+      // ── 對外總入口：殺棋層先跑，跑不出結論才交給搜尋 ──────────
+      function bestMove(board, player, options) {
+        const opts = options || {};
+        const now = opts.now || defaultNow;
+        const started = now();
+        const budget = opts.timeLimitMs === undefined ? 900 : opts.timeLimitMs;
+        const deadline = started + budget;
+        const opponent = other(player);
+        const info = { move: null, reason: '', depth: 0, nodes: 0, ms: 0, value: 0, vcf: null, opponentVcf: null, vct: null, opponentVct: null };
+        const finish = () => { info.ms = now() - started; return info; };
+
+        // 殺棋層排班：四層各分到一段**自己的時間窗**（不是「剩多少用多少」），
+        // 所以自己的 VCT 再怎麼難算也吃不掉對手威脅那一段，alpha-beta 也一定留得到四成以上。
+        // 每層另有絕對上限（桌機 900ms 下都到不了上限，短預算時由比例那側決定）。
+        const stage = ratio => started + budget * ratio;
+        const vcfEnd = stage(0.16), vctEnd = stage(0.38), oppVcfEnd = stage(0.46), oppVctEnd = stage(0.58);
+        const vcfMs = opts.vcfMs === undefined ? 180 : opts.vcfMs;
+        const vctMs = opts.vctMs === undefined ? 240 : opts.vctMs;
+        const oppVcfMs = opts.opponentVcfMs === undefined ? 110 : opts.opponentVcfMs;
+        const oppVctMs = opts.opponentVctMs === undefined ? 130 : opts.opponentVctMs;
+
+        const stones = countStones(board);
+        if (stones === 0) { info.move = { row: 7, col: 7 }; info.reason = 'opening'; return finish(); }
+
+        const report = boardReport(board);
+        if (report[player].fivePoints.length) {
+          info.move = report[player].fivePoints[0];
+          info.reason = 'win';
+          return finish();
+        }
+        if (report[opponent].fivePoints.length) {
+          const blocks = report[opponent].fivePoints;
+          let pick = blocks[0], pickValue = -Infinity;
+          for (let i = 0; i < blocks.length; i += 1) {
+            const value = localGain(board, blocks[i].row, blocks[i].col, player);
+            if (value > pickValue) { pickValue = value; pick = blocks[i]; }
+          }
+          info.move = pick;
+          info.reason = blocks.length > 1 ? 'block-lost' : 'block';
+          return finish();
+        }
+
+        // 一步做出擋不完的四（活四／雙衝四）＝下一手直接贏
+        const myFours = fourMovesOf(board, player);
+        for (let i = 0; i < myFours.length; i += 1) {
+          if (myFours[i].win || myFours[i].fivePoints.length >= 2) {
+            info.move = { row: myFours[i].row, col: myFours[i].col };
+            info.reason = 'four-win';
+            return finish();
+          }
+        }
+
+        // 連續威脅殺要有柴火才可能成立：任何一種三（活三／眠三，一步就能變四）、已經有四、或兩條活二。
+        // 沒柴火還硬跑，等於把時間從 alpha-beta 手上白拿走——安靜局面就是靠搜尋做局的。
+        // 注意：別把眠三漏掉——P16 的白棋是「D8 擋住的眠三＋一條斜活二」，漏了它就整個 VCF 不跑，
+        //   四三必勝的那手 H8 直接看不見（09-05 收窄成 openThree 時當場踩到）。
+        const hasFuel = side => side.four > 0 || side.openThree > 0 || side.sleepThree > 0 || side.openTwo >= 2;
+        const myFuel = hasFuel(report[player]);
+        /* 兩側同一把尺。09-05 試過把對手那側收緊成「要有三或四才查」，想把省下來的兩成預算
+           還給 alpha-beta；配對實測（種子 20260905）是拆東牆補西牆，而且拆錯牆：
+             對初級 12 局 42%(5勝0負7和) 變 50%(6勝1負5和)，小賺、但多輸一局
+             對進階 20 局 85%(17勝0負3和) 變 70%(14勝0負6和)，大賠
+           對進階正是 VCT 在發揮的那一組：對手的連續威脅要及早看見，晚看見就只能跟著擋。
+           所以兩側都用同一個寬門檻——有三、有四、或兩條活二才跑殺棋層。 */
+        const foeFuel = hasFuel(report[opponent]);
+
+        if (stones >= 4 && myFuel) {
+          const vcf = findVcf(board, player, {
+            now, maxDepth: opts.vcfDepth || 8,
+            nodeLimit: opts.vcfNodes || 20000,
+            deadline: Math.min(deadline, vcfEnd, now() + vcfMs)
+          });
+          if (vcf) { info.move = vcf.moves[0]; info.reason = 'vcf'; info.vcf = vcf.moves; return finish(); }
+        }
+
+        // VCF 攻不進去才輪 VCT（活三也算威脅，逼守方一路回應到雙活三／四三）
+        if (stones >= 4 && myFuel && opts.useVct !== false) {
+          const vct = findVct(board, player, {
+            now, maxDepth: opts.vctDepth || 11,
+            nodeLimit: opts.vctNodes || 14000,
+            deadline: Math.min(deadline, vctEnd, now() + vctMs)
+          });
+          if (vct) { info.move = vct.moves[0]; info.reason = 'vct'; info.vct = vct.moves; return finish(); }
+        }
+
+        let opponentVcf = null;
+        if (stones >= 4 && foeFuel && opts.checkOpponentVcf !== false && now() < oppVcfEnd - 10) {
+          opponentVcf = findVcf(board, opponent, {
+            now, maxDepth: opts.vcfDepth || 8,
+            nodeLimit: opts.opponentVcfNodes || 9000,
+            deadline: Math.min(deadline, oppVcfEnd, now() + oppVcfMs)
+          });
+          info.opponentVcf = opponentVcf ? opponentVcf.moves : null;
+        }
+
+        let opponentVct = null;
+        if (!opponentVcf && stones >= 4 && foeFuel && opts.useVct !== false && opts.checkOpponentVct !== false
+          && now() < oppVctEnd - 10) {
+          opponentVct = findVct(board, opponent, {
+            now, maxDepth: opts.opponentVctDepth || 9,
+            nodeLimit: opts.opponentVctNodes || 7000,
+            deadline: Math.min(deadline, oppVctEnd, now() + oppVctMs)
+          });
+          info.opponentVct = opponentVct ? opponentVct.moves : null;
+        }
+
+        const rootMoves = orderedMoves(board, player, report, opts.width || 16);
+        if (!rootMoves.length) { info.reason = 'nomove'; return finish(); }
+        const threat = opponentVcf || opponentVct;
+        if (threat) {
+          // 對手有連續威脅殺：把破解點（起手威脅點與它的擋點）排到候選最前，讓 alpha-beta 先看
+          const guard = opponentVcf
+            ? [{ row: opponentVcf.moves[0].row, col: opponentVcf.moves[0].col }]
+            : vctGuardPoints(board, opponent, opponentVct.moves[0]);
+          const key = m => m.row * SIZE + m.col;
+          const guardKeys = new Set(guard.map(key));
+          rootMoves.sort((a, b) => (guardKeys.has(key(b)) ? 1 : 0) - (guardKeys.has(key(a)) ? 1 : 0));
+          for (let i = guard.length - 1; i >= 0; i -= 1) {
+            if (!rootMoves.some(m => key(m) === key(guard[i]))) rootMoves.unshift(guard[i]);
+          }
+        }
+
+        const searchDeadline = threat ? Math.min(deadline, started + budget * 0.8) : deadline;
+        const result = searchMove(board, player, {
+          now, deadline: searchDeadline, maxDepth: opts.maxDepth || 8,
+          width: opts.width || 16, rootMoves
+        });
+        info.move = result.move || { row: rootMoves[0].row, col: rootMoves[0].col };
+        info.value = result.value;
+        info.depth = result.depth;
+        info.nodes = result.nodes;
+        info.reason = 'search';
+
+        // 對手有連續威脅殺：確認選出來的這手真的把它拆掉了，沒拆就換一手拆得掉的
+        if (threat) {
+          const cap = opponentVcf ? 7 : 5;   // VCT 驗一次比 VCF 貴，名單放短一點
+          const shortlist = [info.move];
+          for (let i = 0; i < rootMoves.length && shortlist.length < cap; i += 1) {
+            if (!shortlist.some(m => m.row === rootMoves[i].row && m.col === rootMoves[i].col)) {
+              shortlist.push({ row: rootMoves[i].row, col: rootMoves[i].col });
+            }
+          }
+          let safe = null;
+          for (let i = 0; i < shortlist.length; i += 1) {
+            if (now() > deadline) break;
+            const move = shortlist[i];
+            board[move.row][move.col] = player;
+            let survives = winsAt(board, move.row, move.col, player);
+            if (!survives) {
+              survives = !findVcf(board, opponent, {
+                now, maxDepth: opts.vcfDepth || 8, nodeLimit: 5000,
+                deadline: Math.min(deadline, now() + 50)
+              });
+            }
+            if (survives && opponentVct) {
+              survives = !findVct(board, opponent, {
+                now, maxDepth: opts.opponentVctDepth || 9, nodeLimit: 2500,
+                deadline: Math.min(deadline, now() + 45)
+              });
+            }
+            board[move.row][move.col] = EMPTY;
+            if (survives) { safe = move; break; }
+          }
+          if (safe && (safe.row !== info.move.row || safe.col !== info.move.col)) {
+            info.move = safe;
+            info.reason = opponentVcf ? 'break-vcf' : 'break-vct';
+          }
+        }
+        return finish();
+      }
+
+      // ── 局末複盤：關鍵手分析（給教練當事實，不是台詞）────────
+      function samePoint(a, b) { return a.row === b.row && a.col === b.col; }
+
+      function analyzeGame(moves, options) {
+        const opts = options || {};
+        const labels = opts.labels || { 1: '她', 2: '你' };
+        const board = emptyBoard();
+        const entries = [];
+        let vctProbes = 0;
+        for (let i = 0; i < moves.length; i += 1) {
+          const move = moves[i];
+          const player = move.player;
+          if (!inside(move.row, move.col) || board[move.row][move.col] !== EMPTY) break;
+          const opponent = other(player);
+          const report = boardReport(board);
+          const myFive = report[player].fivePoints;
+          const oppFive = report[opponent].fivePoints;
+          let kind = '', note = '', severity = 0;
+
+          if (myFive.length && !myFive.some(p => samePoint(p, move))) {
+            kind = 'mistake';
+            severity = 90000000;
+            note = '有一步就能連五的點（' + pointName(myFive[0].row, myFive[0].col) + '）沒下';
+          } else if (oppFive.length && !oppFive.some(p => samePoint(p, move))) {
+            kind = 'mistake';
+            severity = 80000000;
+            note = '沒擋掉對手的衝四（' + pointName(oppFive[0].row, oppFive[0].col) + '），下一手就被連成五子';
+          } else {
+            // 分差：跟當下最好的另一手比，差多少
+            const alternatives = orderedMoves(board, player, report, 8);
+            let bestAlternative = -Infinity, actual = null;
+            for (let a = 0; a < alternatives.length; a += 1) {
+              const point = alternatives[a];
+              board[point.row][point.col] = player;
+              const value = evaluateBoard(board, player);
+              board[point.row][point.col] = EMPTY;
+              if (samePoint(point, move)) actual = value;
+              else if (value > bestAlternative) bestAlternative = value;
+            }
+            if (actual === null) {
+              board[move.row][move.col] = player;
+              actual = evaluateBoard(board, player);
+              board[move.row][move.col] = EMPTY;
+            }
+            if (bestAlternative > -Infinity && bestAlternative - actual > 60000) {
+              kind = 'mistake';
+              severity = bestAlternative - actual;
+              note = '這手的價值明顯輸給當時盤面上更好的點';
+            }
+          }
+
+          board[move.row][move.col] = player;
+          const won = winsAt(board, move.row, move.col, player);
+          const shape = fourInfoAt(board, move.row, move.col, player);
+          const afterReport = boardReport(board)[player];
+          if (won) {
+            kind = 'finish';
+            severity = 95000000;
+            note = '連成五子，這局收在這手';
+          } else if (shape.fivePoints.length >= 2) {
+            kind = 'combo';
+            severity = 70000000;
+            note = '做出擋不完的四（連五點有兩個以上）';
+          } else if (shape.fivePoints.length >= 1 && afterReport.openThree >= 1) {
+            kind = 'combo';
+            severity = 60000000;
+            note = '做出四三，擋一邊就輸另一邊';
+          } else if (afterReport.openThree >= 2) {
+            kind = 'combo';
+            severity = 50000000;
+            note = '做出雙活三';
+          } else if (afterReport.openThree >= 1 && vctProbes < 6) {
+            // 這手是不是連續威脅殺的起手？把子拿回來問 VCT，答案是同一點才算數。
+            // 一局最多問六次（每次 40ms 上限），複盤跑在終局，不會卡住落子。
+            vctProbes += 1;
+            board[move.row][move.col] = EMPTY;
+            const vct = findVct(board, player, { maxDepth: 9, nodeLimit: 3000, timeLimitMs: 40 });
+            board[move.row][move.col] = player;
+            if (vct && samePoint(vct.moves[0], move)) {
+              kind = 'combo';
+              severity = 45000000;
+              note = '發起連續威脅，從這手起對手每一手都只能被動回應';
+            }
+          }
+
+          if (kind) {
+            entries.push({
+              n: i + 1,
+              side: labels[player] || String(player),
+              player,
+              point: pointName(move.row, move.col),
+              kind,
+              severity,
+              note
+            });
+          }
+        }
+
+        const picks = [];
+        const push = entry => {
+          if (entry && !picks.some(p => p.n === entry.n)) picks.push(entry);
+        };
+        const mistakes = entries.filter(e => e.kind === 'mistake' && e.player === (opts.reviewPlayer || BLACK))
+          .sort((a, b) => b.severity - a.severity);
+        push(mistakes[0]);
+        push(entries.filter(e => e.kind === 'finish').at(-1));
+        push(entries.filter(e => e.kind === 'combo').at(-1));
+        push(mistakes[1]);
+        return picks.slice(0, 3).sort((a, b) => a.n - b.n)
+          .map(entry => ({ n: entry.n, side: entry.side, point: entry.point, note: entry.note }));
+      }
+
+      function tune(settings) {
+        if (settings && typeof settings.defenseWeight === 'number') defenseWeight = settings.defenseWeight;
+        if (settings && typeof settings.quietDefense === 'number') quietDefense = settings.quietDefense;
+        if (settings && typeof settings.openTwoBonus === 'number') openTwoBonus = settings.openTwoBonus;
+        if (settings && typeof settings.developBonus === 'number') developBonus = settings.developBonus;
+        return { defenseWeight, quietDefense, openTwoBonus, developBonus };
+      }
+
+      return {
+        SIZE, EMPTY, BLACK, WHITE, DIRS, SCORE,
+        emptyBoard, cloneBoard, inside, other, pointName, countStones, isBoardFull,
+        winsAt, hasLiveWindow, isDeadPosition,
+        analyzeOwn, boardReport, evaluateBoard, scoreFromReport, comboBonus,
+        neighborEmpties, localGain, localProfile, orderedMoves,
+        fourInfoAt, fourMovesOf, findVcf, searchMove, bestMove, analyzeGame, tune,
+        fivePointsQuick, openThreeDirections, lineDefensePoints, canMakeOpenFourInLine,
+        threatMovesOf, findVct, vctGuardPoints
+      };
+    })();
+    /* GOMOKU-ENGINE-END */
+    const EXPERT_TIME_MS=900,HINT_TIME_MS=600;let lastEngineInfo=null;
+    const POSTGAME_KEY=STORE_PREFIX+"postgame_v1";let postgameEnabled=safeGet(POSTGAME_KEY)!=="false",postgameRequested=false;   // 終局複盤開關（業主 09-05：公開版給勾選，預設開）
+    function chooseComputerMove(difficulty=activeDifficulty){
+      const candidates=emptyPoints();if(!candidates.length)return null;if(history.length===0)return{row:7,col:7};
+      if(difficulty==="expert"){const info=GOMOKU_ENGINE.bestMove(board.map(row=>[...row]),WHITE,{timeLimitMs:EXPERT_TIME_MS});lastEngineInfo=info;if(info.move&&board[info.move.row][info.move.col]===EMPTY)return{row:info.move.row,col:info.move.col};}
+      let bestValue=-Infinity,bestMoves=[];
+      for(const point of candidates){
+        const attack=evaluatePoint(point.row,point.col,WHITE),defense=evaluatePoint(point.row,point.col,BLACK);let value=Math.max(attack,defense*1.06);
+        if(difficulty==="advanced"){board[point.row][point.col]=WHITE;const reply=bestReplyScore(BLACK);board[point.row][point.col]=EMPTY;value-=Math.min(reply*.16,120000);}
+        if(value>bestValue){bestValue=value;bestMoves=[point];}else if(value===bestValue)bestMoves.push(point);
+      }
+      return bestMoves[Math.floor(Math.random()*bestMoves.length)];
+    }
+    function commitMove(row,col,player){
+      if(gameOver||!isInside(row,col)||board[row][col]!==EMPTY)return false;
+      hintMark=null;board[row][col]=player;history.push({row,col,player});
+      if(hasFiveFrom(row,col,player)){gameOver=true;thinking=false;renderBoard();updateStatus(playerName(player)+"勝利！");return true;}
+      if(isDeadPosition()){gameOver=true;thinking=false;renderBoard();updateStatus("和局（雙方皆無法連五）");return true;}
+      if(isBoardFull()){gameOver=true;thinking=false;renderBoard();updateStatus("棋盤已滿，本局和局。");return true;}
+      currentPlayer=player===BLACK?WHITE:BLACK;renderBoard();return true;
+    }
+    function onPointClick(event){
+      if(thinking||gameOver||(modeSelect.value==="computer"&&currentPlayer!==BLACK))return;
+      const row=Number(event.currentTarget.dataset.row),col=Number(event.currentTarget.dataset.col);
+      if(!commitMove(row,col,currentPlayer))return;saveGame();
+      if(gameOver){onGameEnd();return;}if(modeSelect.value==="computer")scheduleComputerMove();
+    }
+    function scheduleComputerMove(){
+      thinking=true;renderBoard();aiTimer=window.setTimeout(()=>{
+        aiTimer=null;const move=chooseComputerMove();thinking=false;if(move&&!gameOver)commitMove(move.row,move.col,WHITE);saveGame();
+        if(gameOver)onGameEnd();else evaluateCoachAfterExchange();
+      },180);
+    }
+    function cancelComputerMove(){if(aiTimer!==null)window.clearTimeout(aiTimer);aiTimer=null;thinking=false;}
+    function saveGame(){
+      if(gameOver||history.length===0){try{localStorage.removeItem(SAVE_KEY);}catch(_error){}return;}
+      safeSet(SAVE_KEY,JSON.stringify({history,mode:modeSelect.value,difficulty:activeDifficulty,currentPlayer,coachTranscript:coachTranscript.slice(-CHAT_CAP)}));
+    }
+    function restoreGame(){
+      const saved=readJson(SAVE_KEY,null);if(!saved||!Array.isArray(saved.history)||!saved.history.length)return false;
+      const restored=makeEmptyBoard();
+      for(const move of saved.history){if(!isInside(move.row,move.col)||restored[move.row][move.col]!==EMPTY)return false;restored[move.row][move.col]=move.player===WHITE?WHITE:BLACK;}
+      board=restored;history=saved.history.map(move=>({...move}));modeSelect.value=saved.mode==="two-player"?"two-player":"computer";activeDifficulty=saved.difficulty==="advanced"||saved.difficulty==="expert"?saved.difficulty:"beginner";difficultySelect.value=activeDifficulty;currentPlayer=saved.currentPlayer===WHITE?WHITE:BLACK;
+      coachTranscript=(Array.isArray(saved.coachTranscript)?saved.coachTranscript:[]).filter(row=>row&&(row.who==="him"||row.who==="player")&&typeof row.text==="string").slice(-CHAT_CAP).map(row=>({...row,shownAt:-1e9,_animated:true}));
+      return true;
+    }
+    function startNewGame(){
+      cancelComputerMove();cancelCoachRequest();board=makeEmptyBoard();currentPlayer=BLACK;gameOver=false;history=[];hintMark=null;lastCoachMoveNo=null;resultLogged=false;postgameRequested=false;activeDifficulty=difficultySelect.value;updateDifficultyHint();renderBoard();saveGame();maybeDailyOpening("新局剛開桌，玩家執黑還沒落子");
+    }
+    function undoMove(){
+      if(!history.length)return;cancelComputerMove();cancelCoachRequest();resultLogged=false;postgameRequested=false;hintMark=null;
+      const removeCount=modeSelect.value==="computer"&&history.length>=2?2:1;
+      for(let index=0;index<removeCount;index+=1){const move=history.pop();if(move)board[move.row][move.col]=EMPTY;}
+      gameOver=isDeadPosition()||isBoardFull();currentPlayer=modeSelect.value==="computer"?BLACK:(history.length%2===0?BLACK:WHITE);renderBoard();if(gameOver)updateStatus(isBoardFull()?"棋盤已滿，本局和局。":"和局（雙方皆無法連五）");saveGame();
+    }
+    function changeMode(){cancelComputerMove();if(modeSelect.value!=="computer")cancelCoachRequest();saveGame();if(!gameOver&&modeSelect.value==="computer"&&currentPlayer===WHITE)scheduleComputerMove();else renderBoard();}
+    function updateDifficultyHint(){elements.difficultyHint.textContent=difficultySelect.value===activeDifficulty?"目前即為本局使用的難度。":"難度會在下一次「新局」時生效。";}
+
+    function winningPointsOf(player){
+      const points=[];for(const point of emptyPoints()){board[point.row][point.col]=player;if(hasFiveFrom(point.row,point.col,player))points.push(point);board[point.row][point.col]=EMPTY;}return points;
+    }
+    function movePatternOf(row,col,player){
+      let best={stones:1,open:0};
+      for(const[rs,cs]of DIRECTIONS){const forward=scanSide(row,col,rs,cs,player),backward=scanSide(row,col,-rs,-cs,player),stones=1+forward.stones+backward.stones,open=forward.open+backward.open;if(stones>best.stones||(stones===best.stones&&open>best.open))best={stones,open};}
+      return best;
+    }
+    function liveThreesOf(player){
+      const found=[];for(let row=0;row<SIZE;row+=1)for(let col=0;col<SIZE;col+=1)if(board[row][col]===player){const pattern=movePatternOf(row,col,player);if(pattern.stones===3&&pattern.open===2)found.push({row,col});}
+      return found.filter((point,index,all)=>all.findIndex(other=>other.row===point.row&&other.col===point.col)===index);
+    }
+    function boardFactsOf(){
+      const facts=["目前玩家（黑）已下 "+history.filter(move=>move.player===BLACK).length+" 手"],playerWins=winningPointsOf(BLACK),characterWins=winningPointsOf(WHITE),playerThrees=liveThreesOf(BLACK),characterThrees=liveThreesOf(WHITE);
+      if(playerWins.length)facts.push("玩家下一手就能連五（威脅點："+playerWins.slice(0,3).map(point=>pointNameOf(point.row,point.col)).join("、")+"）");
+      if(characterWins.length)facts.push("你下一手就能連五（威脅點："+characterWins.slice(0,3).map(point=>pointNameOf(point.row,point.col)).join("、")+"）");
+      if(!playerWins.length&&!characterWins.length)facts.push("雙方都還沒有下一手連五的直接威脅");
+      if(playerThrees.length)facts.push("玩家有兩頭都空的活三（經過 "+pointNameOf(playerThrees[0].row,playerThrees[0].col)+"）");
+      if(characterThrees.length)facts.push("你有兩頭都空的活三（經過 "+pointNameOf(characterThrees[0].row,characterThrees[0].col)+"）");
+      const lastPlayer=history.filter(move=>move.player===BLACK).at(-1),lastCharacter=history.filter(move=>move.player===WHITE).at(-1);
+      if(lastPlayer)facts.push(moveFactOf(lastPlayer));if(lastCharacter)facts.push(moveFactOf(lastCharacter));return facts;
+    }
+    function hintReasonOf(info){if(!info||!info.move)return"";if(info.reason==="opening")return"開局搶天元";if(info.reason==="win")return"直接連成五子，這局就收了";if(info.reason==="block")return"先擋掉對面的連五點，不擋就輸";if(info.reason==="block-lost")return"對面的連五點不只一個，先擋最凶的那個";if(info.reason==="four-win")return"做一個擋不完的四，下一手就成五";if(info.reason==="vcf")return"從這裡開始連續衝四，一路殺到底";if(info.reason==="vct")return"從這裡開始連續威脅，對面擋不完";if(info.reason==="break-vcf"||info.reason==="break-vct")return"拆掉對面的連續威脅";const snapshot=board.map(row=>[...row]);const attack=GOMOKU_ENGINE.localGain(snapshot,info.move.row,info.move.col,BLACK),defense=GOMOKU_ENGINE.localGain(snapshot,info.move.row,info.move.col,WHITE);return defense>attack?"先擋對面那條線":"進攻，疊自己的威脅";}
+    function chooseHintPoint(){
+      // 求救不論本局難度一律走高手引擎（幫玩家的點要準）
+      const candidates=emptyPoints();if(!candidates.length)return null;if(history.length===0)return{row:7,col:7,reason:"開局搶天元"};
+      const info=GOMOKU_ENGINE.bestMove(board.map(row=>[...row]),BLACK,{timeLimitMs:HINT_TIME_MS});if(!info.move||board[info.move.row][info.move.col]!==EMPTY)return null;
+      return{row:info.move.row,col:info.move.col,reason:hintReasonOf(info)};
+    }
+    function herMoveNo(){return history.filter(move=>move.player===BLACK).length;}
+    function factsBlock(details){
+      if(!Array.isArray(details.facts)||!details.facts.length)return"";
+      return"\n【盤況翻譯官小抄（程式讀盤翻好的事實，講局面以這份為準；禁自己憑點位代號腦補位置，禁逐條複誦；小抄沒列的威脅＝不存在，禁自己腦補被盯著或攻防關係）】\n- "+details.facts.slice(0,8).map(value=>String(value).slice(0,140)).join("\n- ");
+    }
+    function buildGomokuTrigger(trigger,details={}){
+      const summary=details.summary||"";
+      if(trigger==="opening")return"【棋桌時機】玩家剛坐下來跟你開了一局五子棋（電腦難度："+(activeDifficulty==="expert"?"高手":activeDifficulty==="advanced"?"進階":"初級")+"，玩家執黑先走）。開場說句話。";
+      if(trigger==="postgame"){const oc=details.outcome==="player"?"玩家贏、你輸——最後連五的是玩家":details.outcome==="character"?"你贏、玩家輸——最後連五的是你":"和局（雙方都連不成五）";const parts=["【賽後複盤（放寬到至多五句）】這局打完了（結果："+oc+"；共 "+(details.moveNo||"?")+" 手；電腦難度："+(activeDifficulty==="expert"?"高手":activeDifficulty==="advanced"?"進階":"初級")+"）。"];if(details.moves)parts.push("棋譜（每手已標註是誰走的，以括號為準）："+String(details.moves).slice(0,2000));if(Array.isArray(details.keyMoves)&&details.keyMoves.length)parts.push("引擎算出的關鍵手（事實，不是台詞）："+details.keyMoves.slice(0,3).map(k=>"第"+k.n+"手 "+k.side+"下 "+k.point+"（"+(k.note||"")+"）").join("、"));else parts.push("這局引擎沒抓到明顯的關鍵手。");parts.push("給玩家一段複盤：這局最值得記住的一手（好的或壞的挑最重要的講，點位用棋盤代號）、如果有反覆犯的毛病點出來、最後留一句下局的期待。\n⚠ 主詞校對：每個點位是誰下的以棋譜括號為準，講錯誰贏誰輸整段作廢。"+factsBlock(details));return parts.join("\n");}
+      if(trigger==="four-you")return"【棋桌時機】"+(summary||"你已經連出致命的一線，下一手就能連五")+"。你佔上風了，順口提醒玩家現在必須擋哪裡。"+factsBlock(details);
+      if(trigger==="four-her")return"【棋桌時機】"+(summary||"玩家連出致命的一線，下一手就能連五")+"。輪到你頭痛了，回應這件事。"+factsBlock(details);
+      if(trigger==="good")return"【棋桌時機】"+(summary||"玩家這手下得好，擺出了真正的威脅")+"。誇玩家一句，順口點出這手好在哪。"+factsBlock(details);
+      if(trigger==="result"){const outcome=details.outcome==="player"?"這局玩家贏了（玩家連成五子）":details.outcome==="character"?"這局你贏了（你連成五子）":"這局和局";return"【棋桌時機】"+outcome+(summary?"——"+summary:"")+"。回應這個結果，至多兩句。"+factsBlock(details);}
+      if(trigger==="hint")return"【求救】玩家問這手該下哪（"+(summary||"局面膠著")+"）。你評估的好點是 "+(details.bestFact||"（沒算出來）")+"。用白話帶玩家：先講為什麼，是要擋人還是要進攻，一次只講一個重點。"+factsBlock(details);
+      if(trigger==="chat")return"【棋桌閒聊】玩家邊下棋邊跟你說："+JSON.stringify(String(details.text||"").slice(0,500))+(summary?"（局面："+summary+"）":"")+"。回玩家的話，可以聊、可以講棋，但別自顧自上課。"+factsBlock(details);
+      return"【棋桌時機】"+summary+"。順著局面說句話。"+factsBlock(details);
+    }
+    function buildMessages(trigger,details={}){
+      const player=settings.playerName.trim()||"玩家",skillLine=settings.playerSkill==="experienced"?"玩家會下；你只陪下不上課":"玩家是初學者；你會教，教的時候白話具體、一次只講一件事";
+      const system="【角色卡】\n角色名："+settings.characterName.trim()+"\n"+(settings.characterDescription.trim()||"（角色卡沒有補充描述）")+"\n\n【棋桌場景】\n你是"+settings.characterName.trim()+"，正在跟"+player+"面對面下五子棋（十五路、無禁手），玩家執黑先行、你執白（你的棋由程式代走，你負責看盤開口）。"+skillLine+"。點位用棋盤代號（像 H8）點到即可，禁連發堆砌。相處模式只依角色卡，不自行預設關係。\n\n【輸出規則（最高優先）】\n- 你是角色本人，正在棋桌對面開口。輸出只有台詞本文，零其他。\n- 至多兩句，一句能講完就一句。\n- 禁 markdown、表情符號、顏文字、引號包台詞、動作描寫與旁白。\n- 局面資訊是小抄：禁報評分數字、禁逐字複誦小抄。\n- 同一個梗不要重複。";
+      const messages=[{role:"system",content:system}];
+      for(const row of chatHistory.filter(entry=>entry.who==="him").slice(-12))messages.push({role:"assistant",content:row.text});
+      messages.push({role:"user",content:buildGomokuTrigger(trigger,details)});return messages;
+    }
+    function postprocess(text,maxLines=2){
+      const out=[];for(let line of String(text||"").split("\n")){line=line.trim().replace(/^[-*>•]\s*/,"").replace(/^[「\"'“”]|[」\"'“”]$/g,"");if(line)out.push(line);}return out.slice(0,maxLines);
+    }
+    function endpointPath(suffix){return settings.endpoint.trim().replace(/\/+$/,"")+suffix;}
+    function cancelCoachRequest(){if(activeCoachController)activeCoachController.abort();activeCoachController=null;coachThinking=false;}
+    async function askCoach(trigger,details={}){
+      if(modeSelect.value!=="computer"||!coachEnabled||!settingsComplete()||activeCoachController)return false;
+      const messages=buildMessages(trigger,details),controller=new AbortController();
+      const logEntry={trigger,moveNo:details.moveNo??herMoveNo(),url:endpointPath("/chat/completions"),messages:JSON.parse(JSON.stringify(messages)),startedAt:performance.now(),ok:false,lines:0};
+      coachRequestLog.push(logEntry);activeCoachController=controller;coachThinking=true;renderCoach();
+      const timeout=window.setTimeout(()=>controller.abort(),COACH_TIMEOUT_MS);
+      try{
+        const response=await fetch(logEntry.url,{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+settings.apiKey.trim()},body:JSON.stringify({model:settings.model.trim(),messages,stream:false,max_tokens:trigger==="postgame"?700:400}),signal:controller.signal});
+        if(!response.ok)return false;const data=await response.json(),lines=postprocess(data?.choices?.[0]?.message?.content,trigger==="postgame"?6:2);if(!lines.length)return false;
+        coachThinking=false;const shownAt=performance.now();
+        for(const text of lines){coachTranscript.push({who:"him",text,trigger,shownAt});chatHistory.push({who:"him",text,d:localDay()});}
+        coachTranscript=coachTranscript.slice(-CHAT_CAP);chatHistory=chatHistory.slice(-CHAT_CAP);if(trigger!=="hint"&&trigger!=="chat")lastCoachMoveNo=logEntry.moveNo;saveChat();saveGame();logEntry.ok=true;logEntry.lines=lines.length;return true;
+      }catch(_error){return false;}finally{window.clearTimeout(timeout);logEntry.endedAt=performance.now();if(activeCoachController===controller)activeCoachController=null;coachThinking=false;renderCoach();}
+    }
+    function maybeDailyOpening(summary){
+      const day=localDay();if(safeGet(OPENING_DAY_KEY)===day)return false;safeSet(OPENING_DAY_KEY,day);void askCoach("opening",{moveNo:0,summary});return true;
+    }
+    function evaluateCoachAfterExchange(){
+      if(modeSelect.value!=="computer"||!coachEnabled||gameOver)return;
+      const moveNo=herMoveNo(),distance=lastCoachMoveNo===null?Infinity:moveNo-lastCoachMoveNo,playerWins=winningPointsOf(BLACK),characterWins=winningPointsOf(WHITE),lastPlayer=history.filter(move=>move.player===BLACK).at(-1),pattern=lastPlayer?movePatternOf(lastPlayer.row,lastPlayer.col,BLACK):null;
+      let trigger=null,summary="";
+      if(playerWins.length&&distance>=2){trigger="four-her";summary="玩家已連出下一手就能成五的局（威脅點 "+playerWins.slice(0,2).map(point=>pointNameOf(point.row,point.col)).join("、")+"），輪玩家走，你擋不完了";}
+      else if(characterWins.length&&distance>=2){trigger="four-you";summary="你已連出下一手就能成五的局（威脅點 "+characterWins.slice(0,2).map(point=>pointNameOf(point.row,point.col)).join("、")+"），玩家再不擋就輸了";}
+      else if(pattern&&pattern.stones===3&&pattern.open===2&&distance>=4){trigger="good";summary="玩家在 "+pointNameOf(lastPlayer.row,lastPlayer.col)+" 擺出了兩頭都空的活三";}
+      else if(moveNo>=6&&distance>=10){trigger="good";summary="局面纏鬥中，玩家撐得不錯";}
+      if(trigger)void askCoach(trigger,{summary,facts:boardFactsOf()});
+    }
+    function outcomeOfEnd(){const last=history.at(-1);if(last&&hasFiveFrom(last.row,last.col,last.player))return last.player===BLACK?"player":"character";return"draw";}
+    function onGameEnd(){
+      if(modeSelect.value!=="computer"||resultLogged)return;resultLogged=true;const outcome=outcomeOfEnd();records[outcome]+=1;safeSet(RECORD_KEY,JSON.stringify(records));
+      const last=history.at(-1),summary=outcome==="draw"?"雙方都無法連五，和局":sideWordOf(last.player)+"在 "+pointNameOf(last.row,last.col)+" 連成五子";
+      // 終局時上一發台詞若還在飛，askCoach 會直接拒收（家版 09-05 真局抓過）：先等閒下來再發，複盤旗標只在真送出時標
+      void(async()=>{await waitCoachIdle();await askCoach("result",{outcome,summary,facts:boardFactsOf()});await waitCoachIdle();await requestPostgame(outcome);})();
+    }
+    async function waitCoachIdle(maxMs=90000){const started=performance.now();while(activeCoachController&&performance.now()-started<maxMs)await new Promise(resolve=>setTimeout(resolve,200));return!activeCoachController;}
+    function transcriptOfGame(){return history.map(move=>pointNameOf(move.row,move.col)+"("+sideWordOf(move.player)+")").join(" ");}
+    function keyMovesOfGame(){try{return GOMOKU_ENGINE.analyzeGame(history.map(move=>({row:move.row,col:move.col,player:move.player})),{labels:{1:"玩家",2:"你"},reviewPlayer:BLACK});}catch(_error){return[];}}
+    async function requestPostgame(outcome){if(!postgameEnabled||postgameRequested||modeSelect.value!=="computer"||!gameOver)return false;if(!(await waitCoachIdle())||postgameRequested||!gameOver)return false;postgameRequested=true;return askCoach("postgame",{outcome,moveNo:history.length,moves:transcriptOfGame(),keyMoves:keyMovesOfGame(),facts:boardFactsOf(),summary:"這局已經下完，可以回頭講關鍵那幾手"});}
+    function saveChat(){safeSet(CHAT_KEY,JSON.stringify(chatHistory.slice(-CHAT_CAP)));}
+    function loadChat(){
+      const rows=readJson(CHAT_KEY,[]);chatHistory=(Array.isArray(rows)?rows:[]).filter(row=>row&&(row.who==="him"||row.who==="player")&&typeof row.text==="string").slice(-CHAT_CAP).map(row=>({who:row.who,text:row.text,d:String(row.d||localDay())}));
+    }
+    function renderCoach(){
+      const computerMode=modeSelect.value==="computer";elements.coachStage.classList.toggle("two-player",!computerMode);elements.coachStage.classList.toggle("coach-off",!coachEnabled);elements.coachToggle.hidden=!computerMode;elements.coachToggle.setAttribute("aria-checked",String(coachEnabled));elements.chatForm.hidden=!computerMode||!coachEnabled;
+      elements.chatInput.disabled=chatSending||coachThinking;elements.chatSendButton.disabled=chatSending||coachThinking||activeCoachController!==null;elements.helpButton.disabled=coachThinking||gameOver||thinking||currentPlayer!==BLACK||activeCoachController!==null;
+      elements.himBubbleStack.replaceChildren();elements.playerBubbleStack.replaceChildren();let visibleEntries=[];
+      if(coachEnabled&&computerMode&&coachTranscript.length){const now=performance.now(),recent=coachTranscript.slice(-3).filter(entry=>now-(entry.shownAt||0)<8000),lastPlayer=coachTranscript.filter(entry=>entry.who==="player").at(-1),lastHim=coachTranscript.filter(entry=>entry.who==="him").at(-1),visibleSet=new Set([...recent,lastPlayer,lastHim].filter(Boolean));visibleEntries=coachTranscript.filter(entry=>visibleSet.has(entry));if(recent.length){window.clearTimeout(renderCoach._fadeTimer);renderCoach._fadeTimer=window.setTimeout(renderCoach,8200);}}
+      for(const entry of visibleEntries){const bubble=document.createElement("div");bubble.className="coach-bubble "+entry.who+(entry._animated?"":" pop");entry._animated=true;bubble.textContent=entry.text;(entry.who==="player"?elements.playerBubbleStack:elements.himBubbleStack).append(bubble);}
+      if(coachThinking&&computerMode&&coachEnabled){const bubble=document.createElement("div");bubble.className="coach-thinking";bubble.innerHTML='<span class="thinking-dots" aria-label="思考中"><i></i><i></i><i></i></span>';elements.himBubbleStack.append(bubble);}
+    }
+
+    function renderIdentity(){
+      const name=settings.characterName.trim()||"角色";elements.himAvatarFallback.textContent=Array.from(name)[0]||"角";
+      setImage(elements.himAvatar,elements.himAvatarFallback,settings.avatarDataUrl);setImage(elements.playerAvatar,elements.playerAvatarFallback,settings.playerAvatarDataUrl);
+      setImage(elements.himAvatarPreview,elements.himPreviewEmpty,settings.avatarDataUrl);setImage(elements.playerAvatarPreview,elements.playerPreviewEmpty,settings.playerAvatarDataUrl);
+      elements.setupNote.textContent=settingsComplete()?name+" 已就座":"設定完成後他會開口";elements.setupNote.classList.toggle("ready",settingsComplete());
+    }
+    function setImage(image,fallback,source){if(source){image.src=source;image.hidden=false;fallback.hidden=true;}else{image.removeAttribute("src");image.hidden=true;fallback.hidden=false;}}
+    function flattenObject(value,prefix="",out=[]){
+      if(value===null||value===undefined)return out;if(typeof value!=="object"){out.push((prefix?prefix+": ":"")+String(value));return out;}
+      if(Array.isArray(value)){value.forEach((item,index)=>flattenObject(item,prefix?prefix+"["+index+"]":String(index),out));return out;}
+      Object.entries(value).forEach(([key,item])=>flattenObject(item,prefix?prefix+"."+key:key,out));return out;
+    }
+    function normalizeCharacterCard(raw){
+      if(!raw||typeof raw!=="object"||Array.isArray(raw))throw new Error("角色卡不是物件");
+      const card=raw.spec==="chara_card_v2"&&raw.data&&typeof raw.data==="object"?raw.data:raw.data&&raw.name===undefined&&typeof raw.data==="object"?raw.data:raw;
+      const standard=["description","personality","scenario","mes_example"].some(key=>typeof card[key]==="string");
+      if(!standard)return{name:String(card.character_name||card.char_name||card.title||card.name||"").trim(),description:flattenObject(card).join("\n")};
+      const blocks=[];for(const key of["description","personality","scenario"])if(String(card[key]||"").trim())blocks.push(String(card[key]).trim());
+      const sample=String(card.mes_example||"").trim().slice(0,600);if(sample)blocks.push("【語氣樣本】\n"+sample);
+      return{name:String(card.name||card.character_name||"").trim(),description:blocks.join("\n\n")};
+    }
+    function bytesToText(bytes){return new TextDecoder("utf-8",{fatal:false}).decode(bytes);}
+    function base64ToBytes(text){const binary=atob(String(text).replace(/\s/g,""));return Uint8Array.from(binary,char=>char.charCodeAt(0));}
+    function parseTavernPngBytes(bytes){
+      const signature=[137,80,78,71,13,10,26,10];if(bytes.length<8||signature.some((value,index)=>bytes[index]!==value))throw new Error("不是 PNG 檔");
+      const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);let offset=8;
+      while(offset+12<=bytes.length){const length=view.getUint32(offset),type=bytesToText(bytes.slice(offset+4,offset+8)),start=offset+8,end=start+length;if(end+4>bytes.length)throw new Error("PNG 區塊不完整");if(type==="tEXt"){const chunk=bytes.slice(start,end),zero=chunk.indexOf(0),key=zero>=0?bytesToText(chunk.slice(0,zero)):"";if(key==="chara")return JSON.parse(bytesToText(base64ToBytes(bytesToText(chunk.slice(zero+1)))));}offset=end+4;}
+      throw new Error("PNG 裡找不到 chara 角色卡");
+    }
+    async function resizeAvatar(file,maxSize=256){
+      let bitmap=null;try{bitmap=await createImageBitmap(file);}catch(_error){bitmap=null;}
+      if(!bitmap){const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error("讀檔失敗"));reader.readAsDataURL(file);});bitmap=await new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(new Error("圖片解不開，請改用 JPEG 或 PNG"));image.src=dataUrl;});}
+      const width=bitmap.naturalWidth||bitmap.width,height=bitmap.naturalHeight||bitmap.height;if(!width||!height)throw new Error("圖片尺寸讀不到");const scale=Math.min(1,maxSize/Math.max(width,height)),canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round(width*scale));canvas.height=Math.max(1,Math.round(height*scale));canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);const out=canvas.toDataURL("image/jpeg",.85);if(!out||out.length<100)throw new Error("縮圖輸出失敗");return out;
+    }
+    function parseTextCard(text){const value=String(text||"").trim(),match=/^#\s+(.+)\r?\n+([\s\S]*)$/.exec(value);return match?{name:match[1].trim(),description:match[2].trim()}:{name:"",description:value};}
+    function applyParsedCard(parsed,avatarDataUrl="",avatarProvided=false){
+      elements.characterNameInput.value=parsed.name||"";elements.characterDescriptionInput.value=parsed.description||"";settings.characterName=elements.characterNameInput.value;settings.characterDescription=elements.characterDescriptionInput.value;if(avatarProvided)settings.avatarDataUrl=String(avatarDataUrl||"");persistSettings();return{kind:"card",name:settings.characterName,description:settings.characterDescription,avatarStored:Boolean(settings.avatarDataUrl)};
+    }
+    function importMemoryPackage(raw){
+      const rows=Array.isArray(raw.chat)?raw.chat:[];chatHistory=rows.filter(row=>row&&(row.who==="player"||row.who==="him")).slice(-CHAT_CAP).map(row=>({who:row.who,text:String(row.text||""),d:String(row.d||localDay())}));
+      records=blankRecords();for(const key of Object.keys(records))if(Number.isInteger(raw?.records?.[key])&&raw.records[key]>=0)records[key]=raw.records[key];safeSet(RECORD_KEY,JSON.stringify(records));saveChat();return{kind:"memory",chatCount:chatHistory.length};
+    }
+    function importJsonPayload(raw){
+      if(raw?.type==="gomoku_memory_v1")return importMemoryPackage(raw);const foreign = typeof raw?.type === "string" ? raw.type.match(/^([a-z]+)_(memory|card)_v1$/) : null;if (foreign && foreign[1] !== "gomoku") { const roomNames = { cartes: "牌桌 Cartes", echecs: "西洋棋 Échecs", gomoku: "五子棋 Gomoku", banqi: "暗棋 Banqi" }; const roomName = roomNames[foreign[1]] || foreign[1];if (foreign[2] === "memory") throw new Error("這是「" + roomName + "」的記憶包，請到那個房間匯入。");return applyParsedCard({ name: String(raw.name || ""), description: String(raw.description || "") },String(raw.avatarDataUrl || ""),true); }
+      if(raw?.type==="gomoku_card_v1")return applyParsedCard({name:String(raw.name||""),description:String(raw.description||"")},String(raw.avatarDataUrl||""),true);
+      return applyParsedCard(normalizeCharacterCard(raw));
+    }
+    async function parseCardFile(file){
+      const lower=String(file.name||"").toLowerCase();
+      if(lower.endsWith(".png")||file.type==="image/png"){const bytes=new Uint8Array(await file.arrayBuffer()),parsed=normalizeCharacterCard(parseTavernPngBytes(bytes)),avatar=await resizeAvatar(file);return applyParsedCard(parsed,avatar,true);}
+      if(lower.endsWith(".json")||file.type==="application/json")return importJsonPayload(JSON.parse(await file.text()));
+      if(lower.endsWith(".md")||lower.endsWith(".txt")||String(file.type||"").startsWith("text/"))return applyParsedCard(parseTextCard(await file.text()));
+      throw new Error("不支援的檔案格式");
+    }
+    function downloadJson(payload,filename){const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json;charset=utf-8"}),url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),0);return filename;}
+    function cardPackage(){persistSettings();return{type:"gomoku_card_v1",name:settings.characterName,description:settings.characterDescription,avatarDataUrl:settings.avatarDataUrl||""};}
+    function memoryPackage(){return{type:"gomoku_memory_v1",chat:chatHistory.slice(-CHAT_CAP),records:{...records}};}
+    function exportCard(){const payload=cardPackage(),name=(payload.name.trim()||"角色").replace(/[\\/:*?"<>|]/g,"_");return downloadJson(payload,name+"_卡.json");}
+    function exportMemory(){const stamp=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10).replace(/-/g,"");return downloadJson(memoryPackage(),"Gomoku_記憶_"+stamp+".json");}
+    async function setAvatarFromFile(file,key){if(!file||!String(file.type||"").startsWith("image/"))throw new Error("請選擇圖片檔");settings[key]=await resizeAvatar(file);writeSettings();renderIdentity();return settings[key];}
+    function formToSettings(){return{...settings,endpoint:elements.endpointInput.value.trim().replace(/\/+$/,""),apiKey:elements.apiKeyInput.value.trim(),model:elements.modelInput.value.trim(),characterName:elements.characterNameInput.value.trim(),characterDescription:elements.characterDescriptionInput.value,playerName:elements.playerNameInput.value.trim()||"你",playerSkill:elements.playerSkillInput.value==="experienced"?"experienced":"beginner"};}
+    function settingsToForm(){elements.endpointInput.value=settings.endpoint;elements.endpointInput.placeholder="https:"+"//generativelanguage.googleapis.com/v1beta/openai";elements.apiKeyInput.value=settings.apiKey;elements.modelInput.value=settings.model;elements.characterNameInput.value=settings.characterName;elements.characterDescriptionInput.value=settings.characterDescription;elements.playerNameInput.value=settings.playerName||"你";elements.playerSkillInput.value=settings.playerSkill==="experienced"?"experienced":"beginner";}
+    function persistSettings(){
+      const wasComplete=settingsComplete();settings=formToSettings();writeSettings();renderIdentity();
+      if(!wasComplete&&settingsComplete()){safeSet(OPENING_DAY_KEY,localDay());setTimeout(()=>void askCoach("opening",{moveNo:herMoveNo(),summary:"設定完成，角色剛坐到棋桌對面"}),0);}
+    }
+    function clearAllData(skipConfirm=false){
+      if(!skipConfirm&&!confirm("清除本站儲存的金鑰、角色卡、頭像、棋局、對話與戰績？"))return false;
+      const keys=[];try{for(let index=0;index<localStorage.length;index+=1){const key=localStorage.key(index);if(key?.startsWith(STORE_PREFIX))keys.push(key);}keys.forEach(key=>localStorage.removeItem(key));localStorage.removeItem(CHAMBRE_KEY);}catch(_error){}
+      cancelCoachRequest();cancelComputerMove();settings=defaultSettings();chatHistory=[];coachTranscript=[];records=blankRecords();board=makeEmptyBoard();history=[];currentPlayer=BLACK;gameOver=false;hintMark=null;lastCoachMoveNo=null;resultLogged=false;postgameRequested=false;activeDifficulty=difficultySelect.value;settingsToForm();renderIdentity();updateDifficultyHint();renderBoard();elements.cardStatus.textContent="本站 Gomoku 資料已清除。";elements.avatarStatus.textContent="頭像已清除。";return true;
+    }
+    async function loadModels(){
+      persistSettings();elements.modelStatus.textContent="正在撈清單…";elements.modelSelect.hidden=true;elements.modelSelect.replaceChildren();if(!settings.endpoint||!settings.apiKey){elements.modelStatus.textContent="撈不到，請手填";return false;}
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),COACH_TIMEOUT_MS);
+      try{const response=await fetch(endpointPath("/models"),{headers:{Authorization:"Bearer "+settings.apiKey},signal:controller.signal});if(!response.ok)throw new Error("bad response");const data=await response.json(),rows=Array.isArray(data?.data)?data.data:Array.isArray(data?.models)?data.models:[],names=rows.map(row=>String(typeof row==="string"?row:row.id||row.name||"").replace(/^models\//,"")).filter(Boolean);if(!names.length)throw new Error("empty");const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="從清單挑一個模型…";placeholder.disabled=true;placeholder.selected=true;elements.modelSelect.replaceChildren(placeholder,...names.map(name=>{const option=document.createElement("option");option.value=name;option.textContent=name;return option;}));elements.modelSelect.hidden=false;elements.modelStatus.textContent="找到 "+names.length+" 個模型，從下拉挑或手填。";return names;}catch(_error){elements.modelStatus.textContent="撈不到，請手填";return false;}finally{clearTimeout(timer);}
+    }
+    async function handleImportInput(input){
+      const file=input.files?.[0];if(!file)return null;elements.cardStatus.textContent="正在辨識匯入檔…";
+      try{const result=await parseCardFile(file);elements.cardStatus.textContent=result.kind==="memory"?"已還原 "+result.chatCount+" 句對話與戰績。":"已載入"+(result.name?"「"+result.name+"」":"文字角色卡")+"。";return result;}catch(error){elements.cardStatus.textContent="匯入失敗："+error.message;return null;}finally{input.value="";}
+    }
+    function openChatlog(){chatlogTitle.textContent="棋邊對話（"+chatHistory.length+"/"+CHAT_CAP+"）";
+      chatlogBody.replaceChildren();if(!coachTranscript.length){const empty=document.createElement("p");empty.className="cl-empty";empty.textContent="這局還沒說過話。";chatlogBody.append(empty);}
+      if(coachTranscript.length){const day=document.createElement("div");day.className="cl-day";day.textContent="── "+localDay().slice(5).replace("-","/")+" ──";chatlogBody.append(day);}
+      for(const entry of coachTranscript){const row=document.createElement("div");row.className="cl-row "+entry.who;const bubble=document.createElement("div");bubble.className="cl-bubble";bubble.textContent=entry.text;row.append(bubble);chatlogBody.append(row);}
+      chatlogOverlay.hidden=false;chatlogBody.scrollTop=chatlogBody.scrollHeight;
+    }
+    const chatlogOverlay=document.createElement("div");chatlogOverlay.className="chatlog-overlay";chatlogOverlay.hidden=true;chatlogOverlay.innerHTML='<div class="chatlog-panel"><div class="chatlog-head"><span class="chatlog-title">棋邊對話</span><div class="chatlog-actions"><button type="button" class="chatlog-tool chatlog-export">匯出</button><label class="chatlog-tool">匯入<input class="chatlog-import" type="file" accept=".png,.json,.md,.txt,image/png,application/json,text/plain,text/markdown"></label><button type="button" class="chatlog-close">關閉</button></div></div><p class="chatlog-status" aria-live="polite"></p><div class="chatlog-body"></div></div>';document.body.append(chatlogOverlay);const chatlogBody=chatlogOverlay.querySelector(".chatlog-body");
+    /* 業主 09-04 點單：對話視窗匯出／匯入＋總句數，與牌桌同款；記憶包同設定抽屜「攜帶資料」那套 */
+    const chatlogTitle=chatlogOverlay.querySelector(".chatlog-title"),chatlogStatus=chatlogOverlay.querySelector(".chatlog-status"),chatlogImport=chatlogOverlay.querySelector(".chatlog-import");
+    chatlogOverlay.querySelector(".chatlog-export").addEventListener("click",exportMemory);
+    chatlogImport.addEventListener("change",async()=>{chatlogStatus.textContent="正在辨識匯入檔…";const result=await handleImportInput(chatlogImport);chatlogStatus.textContent=elements.cardStatus.textContent;if(result&&result.kind==="memory")openChatlog();});
+
+    const postgameToggle=document.getElementById("postgameToggle");if(postgameToggle){postgameToggle.checked=postgameEnabled;postgameToggle.addEventListener("change",()=>{postgameEnabled=postgameToggle.checked;safeSet(POSTGAME_KEY,String(postgameEnabled));});}
+    elements.coachToggle.addEventListener("click",()=>{coachEnabled=!coachEnabled;safeSet(COACH_ENABLED_KEY,String(coachEnabled));if(!coachEnabled)cancelCoachRequest();renderCoach();});
+    elements.helpButton.addEventListener("click",()=>{if(elements.helpButton.disabled)return;const best=chooseHintPoint();if(!best)return;hintMark={row:best.row,col:best.col};renderBoard();void askCoach("hint",{summary:"玩家按了求救，在想這手該下哪",bestFact:"下在 "+pointNameOf(best.row,best.col)+"（"+best.reason+"）",facts:boardFactsOf()});});
+    elements.chatForm.addEventListener("submit",async event=>{event.preventDefault();if(modeSelect.value!=="computer"||!coachEnabled||chatSending||activeCoachController)return;const text=elements.chatInput.value.trim().slice(0,300);if(!text)return;chatSending=true;elements.chatInput.value="";const shownAt=performance.now();coachTranscript.push({who:"player",text,trigger:"chat",shownAt});chatHistory.push({who:"player",text,d:localDay()});coachTranscript=coachTranscript.slice(-CHAT_CAP);chatHistory=chatHistory.slice(-CHAT_CAP);saveChat();saveGame();renderCoach();try{await askCoach("chat",{text,summary:"第 "+herMoveNo()+" 手前後、"+(gameOver?"已終局":"輪"+sideWordOf(currentPlayer)+"走"),facts:boardFactsOf()});}finally{chatSending=false;renderCoach();elements.chatInput.focus();}});
+    chatlogOverlay.addEventListener("click",event=>{if(event.target===chatlogOverlay||event.target.closest(".chatlog-close"))chatlogOverlay.hidden=true;});
+    document.querySelectorAll(".avatar").forEach(node=>{node.addEventListener("click",openChatlog);node.addEventListener("keydown",event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();openChatlog();}});});
+    modeSelect.addEventListener("change",changeMode);difficultySelect.addEventListener("change",updateDifficultyHint);newGameButton.addEventListener("click",startNewGame);undoButton.addEventListener("click",undoMove);
+    settingsToForm();loadChat();renderIdentity();
+    elements.settingButton.addEventListener("click",()=>{elements.settingsOverlay.hidden=false;elements.endpointInput.focus();});
+    elements.settingsOverlay.addEventListener("click",event=>{if(event.target===elements.settingsOverlay||event.target.closest("[data-close-settings]")){persistSettings();elements.settingsOverlay.hidden=true;}});
+    const persistUnlessFile=event=>{if(event.target&&event.target.type==="file")return;persistSettings();};
+    elements.settingsForm.addEventListener("input",persistUnlessFile);elements.settingsForm.addEventListener("change",persistUnlessFile);
+    document.querySelectorAll("[data-endpoint-preset]").forEach(button=>button.addEventListener("click",()=>{const preset=button.dataset.endpointPreset;elements.endpointInput.value=preset==="google"?"https:"+"//generativelanguage.googleapis.com/v1beta/openai":preset==="openrouter"?"https:"+"//openrouter.ai/api/v1":"";persistSettings();if(preset==="custom")elements.endpointInput.focus();}));
+    elements.toggleKeyButton.addEventListener("click",()=>{const showing=elements.apiKeyInput.type==="text";elements.apiKeyInput.type=showing?"password":"text";elements.toggleKeyButton.textContent=showing?"顯示":"隱藏";});
+    elements.loadModelsButton.addEventListener("click",()=>void loadModels());elements.modelSelect.addEventListener("change",()=>{if(elements.modelSelect.value){elements.modelInput.value=elements.modelSelect.value;persistSettings();elements.modelStatus.textContent="已選 "+elements.modelSelect.value;}});
+    elements.cardFileInput.addEventListener("change",()=>void handleImportInput(elements.cardFileInput));elements.memoryFileInput.addEventListener("change",()=>void handleImportInput(elements.memoryFileInput));elements.exportCardButton.addEventListener("click",exportCard);elements.exportMemoryButton.addEventListener("click",exportMemory);
+    elements.himAvatarInput.addEventListener("change",async()=>{const file=elements.himAvatarInput.files?.[0];if(!file)return;elements.avatarStatus.textContent="正在處理他的頭像…";try{await setAvatarFromFile(file,"avatarDataUrl");elements.avatarStatus.textContent="他的頭像已儲存。";}catch(error){elements.avatarStatus.textContent="頭像失敗："+error.message;}finally{elements.himAvatarInput.value="";}});
+    elements.playerAvatarInput.addEventListener("change",async()=>{const file=elements.playerAvatarInput.files?.[0];if(!file)return;elements.avatarStatus.textContent="正在處理你的頭像…";try{await setAvatarFromFile(file,"playerAvatarDataUrl");elements.avatarStatus.textContent="你的頭像已儲存。";}catch(error){elements.avatarStatus.textContent="頭像失敗："+error.message;}finally{elements.playerAvatarInput.value="";}});
+    elements.clearButton.addEventListener("click",()=>clearAllData(false));document.addEventListener("keydown",event=>{if(event.key==="Escape"){elements.settingsOverlay.hidden=true;chatlogOverlay.hidden=true;}});
+
+    function runSelfTest(){
+      const saved={board,history,currentPlayer,gameOver,hintMark};const results={};
+      try{
+        board=makeEmptyBoard();history=[];for(let col=3;col<8;col+=1)board[7][col]=BLACK;results.winHorizontal=hasFiveFrom(7,7,BLACK);
+        board=makeEmptyBoard();history=[];for(let col=4;col<8;col+=1)board[6][col]=BLACK;const wins=winningPointsOf(BLACK);results.winningThreats=wins.some(point=>point.row===6&&point.col===3)&&wins.some(point=>point.row===6&&point.col===8);
+        board=makeEmptyBoard();history=[];for(let col=6;col<=8;col+=1){board[7][col]=BLACK;history.push({row:7,col,player:BLACK});}results.liveThree=movePatternOf(7,7,BLACK).stones===3&&movePatternOf(7,7,BLACK).open===2&&boardFactsOf().some(fact=>fact.includes("活三"));
+        const hint=chooseHintPoint();results.hintLegal=Boolean(hint&&isInside(hint.row,hint.col)&&board[hint.row][hint.col]===EMPTY);
+        const jsonV1=normalizeCharacterCard({name:"Card V1",description:"One",scenario:"Two"});
+        results.jsonCard=jsonV1.name==="Card V1"&&jsonV1.description.includes("One")&&jsonV1.description.includes("Two");
+        const markdown=parseTextCard("# Markdown Role\n\nVoice and temperament.");
+        results.markdownCard=markdown.name==="Markdown Role"&&markdown.description==="Voice and temperament.";
+        const rawCard={spec:"chara_card_v2",data:{name:"Card V2",description:"Desc",personality:"Dry"}};
+        const charaBytes=new TextEncoder().encode("chara\u0000"+btoa(JSON.stringify(rawCard))),lengthBytes=new Uint8Array(4);
+        new DataView(lengthBytes.buffer).setUint32(0,charaBytes.length);
+        const pngBytes=new Uint8Array(8+4+4+charaBytes.length+4+4+4+4),signature=[137,80,78,71,13,10,26,10];
+        pngBytes.set(signature,0);pngBytes.set(lengthBytes,8);pngBytes.set(new TextEncoder().encode("tEXt"),12);pngBytes.set(charaBytes,16);
+        let pngOffset=16+charaBytes.length+4;pngBytes.set(new Uint8Array(4),pngOffset);pngBytes.set(new TextEncoder().encode("IEND"),pngOffset+4);
+        const parsedPng=normalizeCharacterCard(parseTavernPngBytes(pngBytes));
+        results.pngCardV2=parsedPng.name==="Card V2"&&parsedPng.description.includes("Desc")&&parsedPng.description.includes("Dry");
+        let seed=1,filled=false;
+        for(let attempt=0;attempt<100&&!filled;attempt+=1){
+          board=makeEmptyBoard();history=[];filled=true;
+          for(let row=0;row<SIZE&&filled;row+=1)for(let col=0;col<SIZE;col+=1){
+            seed=(seed*1664525+1013904223)>>>0;const choices=(seed&1)?[BLACK,WHITE]:[WHITE,BLACK];let placed=false;
+            for(const value of choices){
+              let makesFive=false;
+              for(const[rs,cs]of[[0,-1],[-1,0],[-1,-1],[-1,1]]){
+                let same=0;for(let step=1;step<=4;step+=1){const r=row+rs*step,c=col+cs*step;if(!isInside(r,c)||board[r][c]!==value)break;same+=1;}
+                if(same===4){makesFive=true;break;}
+              }
+              if(!makesFive){board[row][col]=value;placed=true;break;}
+            }
+            if(!placed)filled=false;
+          }
+        }
+        results.deadPosition=filled&&isDeadPosition();
+      }finally{board=saved.board;history=saved.history;currentPlayer=saved.currentPlayer;gameOver=saved.gameOver;hintMark=saved.hintMark;}
+      results.allGreen=Object.values(results).every(Boolean);return Object.freeze(results);
+    }
+    window.gomokuPublicTest=Object.freeze({
+      selfTest:runSelfTest,
+      engine:GOMOKU_ENGINE,lastEngineInfo:()=>lastEngineInfo,postgameRequested:()=>postgameRequested,postgameEnabled:()=>postgameEnabled,transcriptOfGame,keyMovesOfGame,
+      constants:Object.freeze({SIZE,EMPTY,BLACK,WHITE}),
+      state:()=>({board:board.map(row=>[...row]),currentPlayer,gameOver,thinking,history:history.map(move=>({...move})),activeDifficulty}),
+      translator:Object.freeze({pointNameOf,moveFactOf,winningPointsOf,movePatternOf,liveThreesOf,boardFactsOf}),
+      coach:()=>({enabled:coachEnabled,thinking:coachThinking,transcript:coachTranscript.map(entry=>({...entry})),requests:coachRequestLog.map(entry=>({...entry}))}),
+      chooseComputerMove,chooseHintPoint,normalizeCharacterCard,parseTavernPngBytes,parseCardFile,importJsonPayload,cardPackage,memoryPackage,loadModels,buildMessages,buildTrigger:buildGomokuTrigger,postprocess,
+      setSettings(next){settings={...settings,...next};settingsToForm();persistSettings();return{...settings,apiKey:settings.apiKey?"(set)":""};},
+      clearAllData(){return clearAllData(true);},
+      async request(trigger,details={}){return askCoach(trigger,{moveNo:herMoveNo(),summary:"測試觸發",...details});},
+      setBoard(moves=[]){cancelComputerMove();board=makeEmptyBoard();history=[];gameOver=false;currentPlayer=BLACK;for(const move of moves){if(!commitMove(move.row,move.col,move.player))throw new Error("無效測試走法");}renderBoard();return history.map(move=>({...move}));},
+      startNewGame
+    });
+    document.documentElement.dataset.gomokuSelfTest=JSON.stringify(runSelfTest());
+    const restored=restoreGame();createBoardView();updateDifficultyHint();if(restored&&modeSelect.value==="computer"&&currentPlayer===WHITE)scheduleComputerMove();maybeDailyOpening(restored?"回到尚未下完的棋局":"玩家第一次走進五子棋房，棋盤還是空的");
+  })();
+  </script>
+</body>
+</html>
